@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     EMBEDDING_API_URL: str = "http://localhost:11434"
     EMBEDDING_MODEL: str = "nomic-embed-text"
 
+    # 模型管理配置
+    MODEL_CONFIG_PATH: str = "./data/model_config.json"  # 运行时模型选择持久化
+    MODEL_CACHE_TTL: int = 30  # 可用模型列表缓存秒数
+
     # 数据库配置
     DATABASE_URL: str = "sqlite:///./data/sunchat.db"
     CHROMA_PERSIST_DIR: str = "./data/chroma"

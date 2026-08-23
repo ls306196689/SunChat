@@ -1,10 +1,20 @@
 """
 SunChat Backend - Chat Route
+实现对话流程：
+1. 用户输入信息
+2. 构建prompt + 用户输入信息 给llm, 看需要查询什么记忆
+3. 按照llm提示查询本地记忆
+4. 本地记忆查询内容 + 用户输入信息 + 记忆提取prompt 给到llm
+5. llm 返回记忆提取内容 以及 对用户输入信息的回复
+6. 本地服务更新记忆,如果有冲突以最新记忆为准
 """
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, AsyncGenerator
 import uuid
+import json
+import asyncio
 
 from services.chat_service import chat_service
 from services.memory_service import memory_service
@@ -18,56 +28,55 @@ class ChatRequest(BaseModel):
     memory_context: bool = True
     search_enabled: bool = True
     model: str = None
+    stream: bool = False
 
 
-class ChatResponse(BaseModel):
-    response: str
-    memory_updates: List[Dict]
-    tokens_used: int
+class StreamResponse(BaseModel):
+    type: str
+    content: str
+    done: bool = False
+    error: str = None
 
 
 @router.post("/chat/messages")
-async def create_message(request: ChatRequest) -> ChatResponse:
-    """发送消息"""
+async def create_message(request: ChatRequest):
+    """
+    发送消息 - 实现完整的对话流程
+
+    流程：
+    1. 用户输入信息
+    2. 构建prompt + 用户输入信息 给llm, 看需要查询什么记忆
+    3. 按照llm提示查询本地记忆
+    4. 本地记忆查询内容 + 用户输入信息 + 记忆提取prompt 给到llm
+    5. llm 返回记忆提取内容 以及 对用户输入信息的回复
+    6. 本地服务更新记忆,如果有冲突以最新记忆为准
+    """
     try:
-        # 获取记忆上下文
-        memories = []
-        if request.memory_context:
-            memories = chat_service.build_memory_context(
-                user_id=1,  # 本地模式固定为1
-                query=request.content
-            )
+        # 用户ID固定为1（实际应该从认证中获取）
+        user_id = 1
 
-        # 构建 prompt
-        system_prompt = "你是一个智能助手。请回答用户问题。"
-        if memories:
-            system_prompt += f"\n\n用户背景信息：\n" + "\n".join([m["content"] for m in memories])
-
-        full_prompt = f"{system_prompt}\n\n用户: {request.content}\n\nAI:"
-
-        # 调用 LLM
-        response = chat_service.generate(full_prompt)
-
-        # 提取记忆
-        new_memories = chat_service.generate_memory_from_message(
-            request.content, response
+        # 调用chat_service.process_message实现完整流程
+        result = chat_service.process_message(
+            user_id=user_id,
+            session_id=int(request.session_id) if request.session_id.isdigit() else 1,
+            content=request.content,
+            memory_enabled=request.memory_context,
+            search_enabled=request.search_enabled,
+            model=request.model
         )
 
-        # 保存记忆
-        for mem in new_memories:
-            memory_service.create_memory(
-                user_id=1,
-                content=mem["content"],
-                memory_type=mem["type"],
-                category=mem.get("category"),
-                importance=mem.get("importance", 5)
-            )
+        return {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "response": result.get("response", ""),
+                "memory_updates": result.get("memory_updates", []),
+                "memory_context": result.get("memory_context", []),
+                "analysis_result": result.get("analysis_result", {}),
+                "tokens_used": result.get("tokens_used", 0)
+            }
+        }
 
-        return ChatResponse(
-            response=response,
-            memory_updates=new_memories,
-            tokens_used=len(response) // 4
-        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

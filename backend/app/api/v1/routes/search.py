@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Dict
 
 from services.search_service import search_svc
+from services.memory_service import memory_service
 
 router = APIRouter()
 
@@ -15,6 +16,13 @@ class SearchRequest(BaseModel):
     intent: str = None
     sources: List[str] = None
     use_memory_context: bool = True
+
+
+class SearchResponse(BaseModel):
+    query: str
+    intent: str
+    results: List[Dict]
+    used_memory: List[Dict]
 
 
 @router.post("/search")
@@ -39,6 +47,20 @@ async def perform_search(request: SearchRequest):
             intent=route_result["intent"]
         )
 
+        # 保存搜索历史
+        from models.sql_models import get_db, SearchHistory
+        db = next(get_db())
+        search_history = SearchHistory(
+            user_id=1,
+            query=request.query,
+            intent=route_result["intent"],
+            results_count=len(results)
+        )
+        db.add(search_history)
+        db.commit()
+        db.refresh(search_history)
+        db.close()
+
         return {
             "code": 200,
             "message": "success",
@@ -51,6 +73,40 @@ async def perform_search(request: SearchRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/search/history")
+async def list_search_history(page: int = 1, page_size: int = 20):
+    """列出搜索历史"""
+    from models.sql_models import SearchHistory, get_db
+    db = next(get_db())
+    offset = (page - 1) * page_size
+    history = db.query(SearchHistory).order_by(
+        SearchHistory.created_at.desc()
+    ).offset(offset).limit(page_size).all()
+
+    total = db.query(SearchHistory).count()
+    db.close()
+
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "history": [
+                {
+                    "id": h.id,
+                    "query": h.query,
+                    "intent": h.intent,
+                    "results_count": h.results_count,
+                    "created_at": h.created_at.isoformat()
+                }
+                for h in history
+            ],
+            "total": total,
+            "page": page,
+            "page_size": page_size
+        }
+    }
 
 
 @router.get("/search/suggest")
@@ -68,7 +124,3 @@ async def search_suggestions(q: str):
             ]
         }
     }
-
-
-# 导入 memory_service
-from services.memory_service import memory_service

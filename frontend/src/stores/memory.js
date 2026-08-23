@@ -1,27 +1,29 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import axios from 'axios'
-
-const API_BASE_URL = 'http://localhost:8000/api/v1'
+import request from '@/utils/request'
 
 export const useMemoryStore = defineStore('memory', () => {
   const memories = ref([])
   const stats = ref(null)
   const loading = ref(false)
+  const error = ref(null)
 
   // 获取记忆列表
   async function fetchMemories(type = null, category = null) {
     try {
       loading.value = true
+      error.value = null
+      
       const params = new URLSearchParams()
       if (type) params.append('type', type)
       if (category) params.append('category', category)
 
-      const response = await axios.get(`${API_BASE_URL}/memories?${params.toString()}`)
-      memories.value = response.data.data.memories || []
+      const response = await request.get(`/memories?${params.toString()}`)
+      memories.value = response.data.memories || response.data || []
       return memories.value
-    } catch (error) {
-      console.error('获取记忆失败:', error)
+    } catch (err) {
+      error.value = err.message || '获取记忆失败'
+      console.error('获取记忆失败:', err)
       return []
     } finally {
       loading.value = false
@@ -31,66 +33,95 @@ export const useMemoryStore = defineStore('memory', () => {
   // 创建记忆
   async function createMemory(content, type = 'semantic', category = null, tags = []) {
     try {
-      const response = await axios.post(`${API_BASE_URL}/memories`, {
+      const response = await request.post('/memories', {
         content,
         type,
         category,
         tags
       })
-      memories.value.unshift(response.data.data)
-      return response.data.data
-    } catch (error) {
-      console.error('创建记忆失败:', error)
-      throw error
+      memories.value.unshift(response.data)
+      error.value = null
+      return response.data
+    } catch (err) {
+      error.value = err.message || '创建记忆失败'
+      console.error('创建记忆失败:', err)
+      throw err
     }
   }
 
   // 搜索记忆
   async function searchMemories(query, top_k = 5) {
     try {
-      const response = await axios.post(`${API_BASE_URL}/memories/search`, {
+      loading.value = true
+      error.value = null
+      
+      const response = await request.post('/memories/search', {
         query,
         top_k
       })
-      return response.data.data.results || []
-    } catch (error) {
-      console.error('搜索记忆失败:', error)
+      
+      memories.value = response.data.results || response.data || []
+      return memories.value
+    } catch (err) {
+      error.value = err.message || '搜索记忆失败'
+      console.error('搜索记忆失败:', err)
       return []
+    } finally {
+      loading.value = false
     }
   }
 
   // 获取统计
   async function fetchStats() {
     try {
-      const response = await axios.get(`${API_BASE_URL}/memories/stats`)
-      stats.value = response.data.data
+      loading.value = true
+      error.value = null
+      
+      const response = await request.get('/memories/stats')
+      stats.value = response.data || response || null
       return stats.value
-    } catch (error) {
-      console.error('获取统计失败:', error)
+    } catch (err) {
+      error.value = err.message || '获取统计失败'
+      console.error('获取统计失败:', err)
       return null
+    } finally {
+      loading.value = false
     }
   }
 
   // 删除记忆
   async function deleteMemory(id) {
     try {
-      await axios.delete(`${API_BASE_URL}/memories/${id}`)
+      await request.delete(`/memories/${id}`)
       memories.value = memories.value.filter(m => m.id !== id)
+      error.value = null
       return true
-    } catch (error) {
-      console.error('删除记忆失败:', error)
-      throw error
+    } catch (err) {
+      error.value = err.message || '删除记忆失败'
+      console.error('删除记忆失败:', err)
+      throw err
     }
+  }
+
+  // 清空状态
+  function clearMemories() {
+    memories.value = []
+    stats.value = null
+    error.value = null
   }
 
   return {
     memories,
     stats,
     loading,
+    error,
+    
+    // actions
     fetchMemories,
     createMemory,
     searchMemories,
     fetchStats,
-    deleteMemory
+    deleteMemory,
+    clearMemories
   }
 })

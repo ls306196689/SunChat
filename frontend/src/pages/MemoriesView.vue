@@ -1,11 +1,15 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useMemoryStore } from '../stores/memory'
-import { NCard, NButton, NInput, NTag, NSpace, useMessage, NEmpty } from 'naive-ui'
+import { ref, onMounted, computed } from 'vue'
+import { useMemoryStore } from '@/stores/memory'
+import MemoryCard from '@/components/ui/MemoryCard.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import { NCard, NButton, NInput, NTag, NSpace, useMessage, NScrollbar, NModal } from 'naive-ui'
 
 const memoryStore = useMemoryStore()
 const message = useMessage()
 const searchQuery = ref('')
+const showAddModal = ref(false)
+const newMemoryContent = ref('')
 
 onMounted(() => {
   memoryStore.fetchStats()
@@ -18,14 +22,31 @@ function handleSearch() {
 }
 
 function handleCreateMemory() {
-  message.info('创建记忆功能待实现')
+  showAddModal.value = true
+}
+
+async function submitMemory() {
+  if (!newMemoryContent.value.trim()) return
+  
+  try {
+    await memoryStore.createMemory(newMemoryContent.value)
+    newMemoryContent.value = ''
+    showAddModal.value = false
+    message.success('记忆创建成功')
+    await memoryStore.fetchStats()
+  } catch (error) {
+    message.error('创建记忆失败: ' + error.message)
+  }
 }
 </script>
 
 <template>
-  <div class="memories-container">
-    <div class="header">
-      <h2>记忆管理中心</h2>
+  <div class="memories-view">
+    <div class="memories-header">
+      <div class="header-left">
+        <h2>记忆管理中心</h2>
+        <p class="subtitle">AI 自动提取并管理您的个人记忆</p>
+      </div>
       <n-button type="primary" @click="handleCreateMemory">
         + 手动添加记忆
       </n-button>
@@ -58,60 +79,85 @@ function handleCreateMemory() {
     </div>
 
     <div class="memories-list">
-      <n-empty v-if="memoryStore.memories.length === 0" description="暂无记忆">
-        <n-button type="primary" @click="handleCreateMemory">添加记忆</n-button>
-      </n-empty>
+      <EmptyState
+        v-if="memoryStore.memories.length === 0 && !memoryStore.loading"
+        icon="🧠"
+        title="暂无记忆"
+        description="开始聊天，AI 将自动提取重要信息并创建记忆"
+        action-text="开始聊天"
+      />
 
-      <n-card
-        v-for="memory in memoryStore.memories"
-        :key="memory.id"
-        class="memory-card"
-        :bordered="false"
-      >
-        <div class="memory-content">{{ memory.content }}</div>
-        <div class="memory-meta">
-          <n-space>
-            <n-tag v-if="memory.type" :type="memory.type === 'semantic' ? 'info' : 'success'">
-              {{ memory.type }}
-            </n-tag>
-            <n-tag v-if="memory.category" type="default">
-              {{ memory.category }}
-            </n-tag>
-            <n-tag v-if="memory.confidence" type="warning">
-              置信度: {{ (memory.confidence * 100).toFixed(0) }}%
-            </n-tag>
-          </n-space>
-          <span class="memory-created">
-            {{ memory.created_at ? new Date(memory.created_at).toLocaleDateString() : '刚刚' }}
-          </span>
-        </div>
-      </n-card>
+      <div v-else class="memories-content">
+        <MemoryCard
+          v-for="memory in memoryStore.memories"
+          :key="memory.id"
+          :memory="memory"
+        />
+      </div>
     </div>
+
+    <!-- 添加记忆模态框 -->
+    <n-modal
+      v-model:show="showAddModal"
+      preset="card"
+      title="添加记忆"
+    >
+      <n-input
+        v-model:value="newMemoryContent"
+        type="textarea"
+        placeholder="输入记忆内容（可选类型和分类）"
+        :autosize="{ minRows: 4, maxRows: 8 }"
+        style="margin-bottom: 16px"
+      />
+      
+      <div class="modal-actions">
+        <n-button @click="showAddModal = false">取消</n-button>
+        <n-button type="primary" @click="submitMemory">添加</n-button>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <style scoped>
-.memories-container {
+.memories-view {
   padding: 20px;
   max-width: 900px;
   margin: 0 auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.header {
+.memories-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.header-left h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.subtitle {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
 }
 
 .stats {
   display: flex;
   gap: 20px;
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .stat-card {
   flex: 1;
+  padding: 16px;
 }
 
 .stat-item {
@@ -122,45 +168,55 @@ function handleCreateMemory() {
   font-size: 24px;
   font-weight: bold;
   color: #18a058;
+  margin-bottom: 4px;
 }
 
 .stat-label {
   font-size: 12px;
   color: #888;
-  margin-top: 4px;
 }
 
 .search-bar {
   display: flex;
   gap: 10px;
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .memories-list {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.memories-content {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  overflow-y: auto;
 }
 
-.memory-card {
-  transition: transform 0.2s;
-}
-
-.memory-content {
-  margin-bottom: 12px;
-  line-height: 1.6;
-}
-
-.memory-meta {
+.modal-actions {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: #888;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
 }
 
-.memory-created {
-  font-size: 12px;
-  color: #999;
+@media (max-width: 768px) {
+  .memories-view {
+    padding: 12px;
+  }
+
+  .memories-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .stats {
+    flex-direction: column;
+  }
 }
 </style>

@@ -3,6 +3,7 @@ SunChat Backend - Search Service Wrapper
 """
 from typing import List, Dict
 from core.search import search_service
+from core.llm import ollama_service
 
 
 class SearchService:
@@ -27,6 +28,95 @@ class SearchService:
         """智能路由"""
         context = {"memories": memories} if memories else None
         return self.service.route_query(query, context)
+
+    def search_with_introduction(self, query: str, memories: List[Dict] = None,
+                                  max_results: int = 5) -> Dict:
+        """
+        搜索并使用 LLM 归纳答案
+
+        Args:
+            query: 搜索查询
+            memories: 用户记忆（用于上下文增强）
+            max_results: 最大结果数
+
+        Returns:
+            包含 answer 和 sources 的结构化响应
+        """
+        # 路由查询并获取意图
+        route_result = self.route_query(query, memories)
+        intent = route_result.get("intent", "general")
+        enhanced_query = route_result.get("query", query)
+
+        # 执行搜索
+        search_results = self.search(enhanced_query, intent=intent, max_results=max_results)
+
+        if not search_results:
+            return {
+                "answer": "未找到相关搜索结果。",
+                "sources": [],
+                "intent": intent
+            }
+
+        # 使用 LLM 归纳答案
+        context = self._build_context_from_results(search_results)
+        answer = self._generate_answer(query, context, memories)
+
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "source": r.get("source", "duckduckgo"),
+                    "snippet": r.get("snippet", ""),
+                    "score": 0.8  # 简化评分
+                }
+                for r in search_results[:5]
+            ],
+            "intent": intent
+        }
+
+    def _build_context_from_results(self, results: List[Dict]) -> str:
+        """从搜索结果构建上下文"""
+        context_parts = []
+        for i, result in enumerate(results, 1):
+            title = result.get("title", "")
+            url = result.get("url", "")
+            snippet = result.get("snippet", result.get("body", ""))
+            context_parts.append(f"[{i}] 标题: {title}\n链接: {url}\n摘要: {snippet}")
+        return "\n\n".join(context_parts)
+
+    def _generate_answer(self, query: str, context: str, memories: List[Dict] = None) -> str:
+        """使用 LLM 归纳答案"""
+        prompt = f"""基于以下搜索结果，回答用户的问题。
+
+用户问题：{query}
+
+搜索结果：
+{context}
+
+请回答用户的问题，如果搜索结果不相关，请说明。如果结果中提到了用户记忆中的内容，请引用它。
+
+要求：
+1. 使用中文回答
+2. 保持回答简洁明了
+3. 引用来源信息
+4. 如果有多个相关来源，请综合回答
+"""
+
+        if memories:
+            memory_text = "\n".join([f"- {m['content']}" for m in memories[:2]])
+            prompt += f"\n\n用户背景信息：\n{memory_text}"
+
+        prompt += "\n\n回答："
+
+        try:
+            answer = ollama_service.generate(prompt)
+            return answer.strip()
+        except Exception as e:
+            print(f"LLM answer generation error: {e}")
+            # 回退到使用第一个结果的摘要
+            return f"根据搜索结果，关于'{query}'的信息如下：\n\n{context[:500]}..."
 
 
 # 全局实例

@@ -18,6 +18,10 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false
+  },
+  sources: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -43,6 +47,20 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
         <span class="dot"></span>
         <span class="dot"></span>
         <span class="dot"></span>
+      </div>
+      <div v-if="!loading && sources && sources.length" class="sources">
+        <div class="sources-title">🔗 网络来源</div>
+        <a
+          v-for="(src, i) in sources"
+          :key="i"
+          class="source-link"
+          :href="src.url || '#'"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="source-idx">[{{ i + 1 }}]</span>
+          <span class="source-name">{{ src.title || src.url }}</span>
+        </a>
       </div>
     </div>
   </div>
@@ -127,5 +145,40 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
 @keyframes bounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
+}
+</style>
+
+<style scoped>
+.sources {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sources-title {
+  font-size: 12px;
+  color: #888;
+}
+
+.source-link {
+  font-size: 13px;
+  color: #5885f6;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-link:hover {
+  text-decoration: underline;
+}
+
+.source-idx {
+  color: #888;
+  margin-right: 4px;
 }
 </style>

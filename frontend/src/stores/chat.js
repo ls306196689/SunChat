@@ -193,6 +193,7 @@ export const useChatStore = defineStore('chat', () => {
             const aiContent = response?.data?.response ?? response?.response ?? ''
             patchPlaceholder(m => {
               m.content = aiContent
+              if (response?.data?.sources) m.sources = response.data.sources
               m.created_at = new Date().toISOString()
             })
             error.value = null

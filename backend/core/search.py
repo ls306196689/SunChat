@@ -29,10 +29,18 @@ class SearchService:
         query: str,
         max_results: int = 5
     ) -> List[Dict]:
-        """执行搜索（失败返回空列表，不抛异常）。"""
+        """执行搜索（失败返回空列表，不抛异常）。结果字段归一化：href -> url。"""
         try:
             results = self.ddgs.text(query, max_results=max_results)
-            return list(results)
+            normalized = []
+            for r in results or []:
+                item = dict(r)
+                if not item.get("url") and item.get("href"):
+                    item["url"] = item["href"]
+                if not item.get("snippet") and item.get("body"):
+                    item["snippet"] = item["body"]
+                normalized.append(item)
+            return normalized
         except Exception as e:
             logger.warning(f"[SEARCH] 搜索失败: {e}")
             return []

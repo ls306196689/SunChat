@@ -235,6 +235,7 @@ function isLoadingMessage(msg) {
               :role="msg.role"
               :content="msg.content"
               :create-time="msg.created_at"
+              :sources="msg.sources || []"
               :loading="msg.role === 'assistant' && chatStore.loading && msg.id === (chatStore.messages[chatStore.messages.length - 1]?.id)"
             />
             

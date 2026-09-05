@@ -29,10 +29,11 @@ def reset_calls():
     LAST_CHAT_PAYLOADS.clear()
     SCRIPTED_CHAT.clear()
 FAKE_SEARCH_RESULTS = [
-    {"title": "Python 语言介绍", "href": "http://example.com/py", "url": "http://example.com/py",
-     "body": "Python 是一种解释型编程语言。", "snippet": "Python 是一种解释型编程语言。"},
-    {"title": "编程入门", "href": "http://example.com/learn", "url": "http://example.com/learn",
-     "body": "编程入门指南。", "snippet": "编程入门指南。"},
+    # 真实 ddgs 返回字段为 title/href/body，url/snippet 由 core.search 归一化生成
+    {"title": "Python 语言介绍", "href": "http://example.com/py",
+     "body": "Python 是一种解释型编程语言。"},
+    {"title": "编程入门", "href": "http://example.com/learn",
+     "body": "编程入门指南。"},
 ]
 
 DEFAULT_REPLY = "好的，这是一条离线模拟回复。"

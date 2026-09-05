@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 
+from app.config import settings
 from services.memory_service import memory_service
 
 router = APIRouter()
@@ -31,16 +32,22 @@ def list_memories(
     page: int = Query(1),
     page_size: int = Query(20)
 ):
-    """列出记忆（简化版）"""
-    # 简化实现
-    return {
-        "code": 200,
-        "message": "success",
-        "data": {
-            "total": 0,
-            "memories": []
+    """列出记忆（分页 + 类型/分类过滤）"""
+    try:
+        result = memory_service.list_memories(
+            user_id=settings.LOCAL_USER_ID,
+            memory_type=type,
+            category=category,
+            page=page,
+            page_size=page_size,
+        )
+        return {
+            "code": 200,
+            "message": "success",
+            "data": result
         }
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/memories/search")
@@ -48,7 +55,7 @@ def search_memories(request: MemorySearchRequest):
     """搜索记忆"""
     try:
         result = memory_service.search_memories(
-            user_id=1,
+            user_id=settings.LOCAL_USER_ID,
             query=request.query,
             top_k=request.top_k,
             filters=request.filters
@@ -70,7 +77,7 @@ def create_memory(request: MemoryCreateRequest):
     """创建记忆"""
     try:
         memory = memory_service.create_memory(
-            user_id=1,
+            user_id=settings.LOCAL_USER_ID,
             content=request.content,
             memory_type=request.type,
             category=request.category,
@@ -129,7 +136,7 @@ def delete_memory(memory_id: str):
 def get_memory_stats():
     """获取记忆统计"""
     try:
-        stats = memory_service.get_stats(user_id=1)
+        stats = memory_service.get_stats(user_id=settings.LOCAL_USER_ID)
         return {
             "code": 200,
             "message": "success",

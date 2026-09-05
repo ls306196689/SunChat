@@ -268,6 +268,50 @@ class TestMemoryService:
         for m in [m1, m2, m3]:
             memory_service.delete_memory(m["id"])
 
+    def test_update_or_create_same_content_updates_not_duplicates(self, memory_service):
+        """冲突语义：同内容（相似度=1）再来一次 → action=updated，不产生第二条记忆"""
+        user_id = 3011
+        m = memory_service.create_memory(user_id=user_id, content="用户养了一只猫",
+                                         category="preference")
+        again = memory_service.update_or_create_memory(
+            user_id=user_id, content="用户养了一只猫", category="preference")
+        assert again["action"] == "updated"
+        assert again["id"] == m["id"]
+        active = memory_service.list_memories(user_id=user_id)["total"]
+        assert active == 1
+
+    def test_update_or_create_conflict_new_content_wins(self, memory_service, monkeypatch):
+        """冲突以新为准：命中相似记忆时 content 必须被替换为新内容并重嵌入"""
+        user_id = 3012
+        m = memory_service.create_memory(user_id=user_id, content="用户住在杭州",
+                                         category="person")
+
+        # 模拟向量检索命中（伪嵌入是哈希式，不同文本相似度≈0，需注入命中）
+        monkeypatch.setattr(
+            memory_service, "search_memories",
+            lambda **kw: [{"memory_id": m["id"], "content": "旧内容",
+                           "similarity": 0.95, "metadata": {}}],
+        )
+        result = memory_service.update_or_create_memory(
+            user_id=user_id, content="用户住在上海", category="person")
+
+        assert result["action"] == "updated"
+        assert result["content"] == "用户住在上海"
+        row = memory_service.db.query(Memory).filter(Memory.id == m["id"]).first()
+        assert row.content == "用户住在上海"
+
+    def test_memory_user_isolation(self, memory_service):
+        """用户隔离：A 的记忆不出现在 B 的向量检索/列表/统计中"""
+        ua, ub = 3013, 3014
+        memory_service.create_memory(user_id=ua, content="机密个人偏好 只属主可见",
+                                     category="preference")
+        assert memory_service.list_memories(user_id=ub)["total"] == 0
+        assert memory_service.get_stats(user_id=ub)["total_count"] == 0
+        hits_b = memory_service.search_memories(user_id=ub, query="机密个人偏好", top_k=5)
+        assert all("机密" not in h["content"] for h in hits_b)
+        hits_a = memory_service.search_memories(user_id=ua, query="机密个人偏好", top_k=5)
+        assert any("机密" in h["content"] for h in hits_a)
+
 
 class TestChromaClient:
     """Test cases for ChromaClient"""

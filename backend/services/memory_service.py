@@ -50,16 +50,20 @@ class ChromaClient:
             metadatas=metadatas or []
         )
 
-    def query(self, query_embeddings: List[List[float]], n_results: int = 5, include: List[str] = None) -> Dict:
-        """查询相似向量"""
+    def query(self, query_embeddings: List[List[float]], n_results: int = 5,
+              include: List[str] = None, where: Dict = None) -> Dict:
+        """查询相似向量（where 支持用户/类型隔离）"""
         collection = self._get_collection()
         if include is None:
             include = ["documents", "metadatas", "distances"]
-        return collection.query(
-            query_embeddings=query_embeddings,
-            n_results=n_results,
-            include=include
-        )
+        kwargs = {
+            "query_embeddings": query_embeddings,
+            "n_results": n_results,
+            "include": include,
+        }
+        if where:
+            kwargs["where"] = where
+        return collection.query(**kwargs)
 
     def delete(self, ids: List[str]):
         """删除向量"""
@@ -196,12 +200,23 @@ class MemoryService(DBSessionMixin):
             query_embedding = embedding_service.embed(query)
             logger.debug(f"[MEMORY] 生成查询向量 - 维度:{len(query_embedding)}")
 
-            # 使用 Chroma 进行向量相似度搜索（包含documents）
+            # 构建 Chroma where 过滤（用户隔离必选，类型/分类可选）
+            conditions = [{"user_id": user_id}]
+            if filters:
+                if filters.get("type"):
+                    conditions.append({"type": filters["type"]})
+                if filters.get("category"):
+                    conditions.append({"category": filters["category"]})
+            where_filter = conditions[0] if len(conditions) == 1 else {"$and": conditions}
+
+            # 使用 Chroma 进行向量相似度搜索（包含documents，where 保证用户隔离）
             chroma_results = self.chroma_client.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k * 2,  # 获取更多结果以进行过滤
-                include=["documents", "metadatas", "distances"]
+                include=["documents", "metadatas", "distances"],
+                where=where_filter,
             )
+
             logger.debug(f"[MEMORY] Chroma 查询完成 - 结果数:{len(chroma_results.get('ids', [[]])[0])}")
 
             # 从 Chroma 结果中提取 IDs
@@ -237,10 +252,11 @@ class MemoryService(DBSessionMixin):
                 logger.debug(f"[MEMORY]   Chroma结果{i+1}: content='{content[:50] if content else 'None'}...', similarity={similarity:.4f}")
 
                 results.append({
-                    "memory_id": chroma_id,
+                    # metadata 中记录了真实记忆 id（chroma_id 是向量 id，不能当记忆 id 用）
+                    "memory_id": metadata.get("memory_id", chroma_id),
                     "content": content,
                     "similarity": round(similarity, 4),
-                    "metadata": metadata
+                    "metadata": metadata,
                 })
 
             # 如果 Chroma 没有结果，回退到 SQLite 关键词搜索
@@ -331,27 +347,77 @@ class MemoryService(DBSessionMixin):
         self.db.commit()
         return True
 
+    def list_memories(self, user_id: int, memory_type: str = None,
+                      category: str = None, page: int = 1,
+                      page_size: int = 20) -> Dict:
+        """分页列出活跃记忆（支持类型/分类过滤，按更新时间倒序）"""
+        q = self.db.query(Memory).filter(
+            Memory.user_id == user_id,
+            Memory.is_active == True  # noqa: E712
+        )
+        if memory_type:
+            q = q.filter(Memory.type == memory_type)
+        if category:
+            q = q.filter(Memory.category == category)
+
+        total = q.count()
+        items = (
+            q.order_by(Memory.updated_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "memories": [
+                {
+                    "id": m.id,
+                    "type": m.type,
+                    "category": m.category,
+                    "content": m.content,
+                    "importance": m.importance,
+                    "confidence": m.confidence,
+                    "tags": (m.extra_data or {}).get("tags", []),
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                    "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+                }
+                for m in items
+            ],
+        }
+
     def get_stats(self, user_id: int) -> Dict:
         """获取记忆统计"""
-        total = self.db.query(Memory).filter(Memory.user_id == user_id).count()
+        total = self.db.query(Memory).filter(
+            Memory.user_id == user_id,
+            Memory.is_active == True  # noqa: E712
+        ).count()
 
         # 按类型统计
         from sqlalchemy import func
         type_counts = self.db.query(Memory.type, func.count(Memory.id)).filter(
-            Memory.user_id == user_id
+            Memory.user_id == user_id,
+            Memory.is_active == True  # noqa: E712
         ).group_by(Memory.type).all()
 
         # 按分类统计
         category_counts = self.db.query(Memory.category, func.count(Memory.id)).filter(
             Memory.user_id == user_id,
+            Memory.is_active == True,  # noqa: E712
             Memory.category != None
         ).group_by(Memory.category).all()
+
+        avg_conf = self.db.query(func.avg(Memory.confidence)).filter(
+            Memory.user_id == user_id,
+            Memory.is_active == True  # noqa: E712
+        ).scalar()
 
         return {
             "total_count": total,
             "by_type": {k: v for k, v in type_counts},
             "by_category": {k: v for k, v in category_counts},
-            "avg_confidence": 0.92,
+            "avg_confidence": round(float(avg_conf), 4) if avg_conf else 0.0,
             "chroma_collection_size": self.chroma_client.count()
         }
 
@@ -449,14 +515,39 @@ class MemoryService(DBSessionMixin):
         for mem in existing_memories:
             similarity = mem.get("similarity", 0)
             if similarity > 0.85:  # 高相似度阈值
-                logger.info(f"[MEMORY] 发现相似记忆，更新 - 相似度:{similarity}")
-                # 更新现有记忆的额外数据
-                existing = self.db.query(Memory).filter(Memory.id == mem.get("memory_id")).first()
+                logger.info(f"[MEMORY] 发现相似记忆，以新为准更新 - 相似度:{similarity}")
+                existing = self.db.query(Memory).filter(
+                    Memory.id == mem.get("memory_id"),
+                    Memory.user_id == user_id,
+                ).first()
                 if existing:
-                    # 更新重要性（如果新记忆更重要）
+                    # 冲突以最新内容为准：更新 content 并重新嵌入向量
+                    existing.content = content
                     if importance > existing.importance:
                         existing.importance = importance
-                    existing.confidence = min(1.0, existing.confidence + 0.1)  # 增加置信度
+                    existing.confidence = min(1.0, existing.confidence + 0.1)
+
+                    try:
+                        if existing.vector_id:
+                            self.chroma_client.delete([existing.vector_id])
+                        new_vector_id = f"vec_{uuid.uuid4().hex[:12]}"
+                        embedding = embedding_service.embed(content)
+                        self.chroma_client.add(
+                            ids=[new_vector_id],
+                            documents=[content],
+                            embeddings=[embedding],
+                            metadatas=[{
+                                "memory_id": existing.id,
+                                "user_id": user_id,
+                                "type": existing.type,
+                                "category": existing.category or "general",
+                                "importance": existing.importance,
+                            }],
+                        )
+                        existing.vector_id = new_vector_id
+                    except Exception as e:
+                        logger.warning(f"[MEMORY] 冲突更新重嵌入失败（保留旧向量）: {e}")
+
                     self.db.commit()
                     self.db.refresh(existing)
 

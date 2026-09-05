@@ -103,7 +103,13 @@ class TestMemoriesAPI:
         assert "similarity" in data["data"]["results"][0]
 
     def test_list_memories_api(self, client):
-        """Test listing memories via API"""
+        """Test listing memories via API（真实分页列表，非空壳）"""
+        # 先确保至少有一条记忆
+        client.post(
+            "/api/v1/memories",
+            json={"content": "列表测试记忆内容", "type": "semantic",
+                  "category": "preference", "importance": 6},
+        )
         response = client.get(
             "/api/v1/memories",
             params={"page": 1, "page_size": 10}
@@ -114,6 +120,18 @@ class TestMemoriesAPI:
         assert data["code"] == 200
         assert "total" in data["data"]
         assert "memories" in data["data"]
+        assert data["data"]["total"] >= 1
+        assert any(m["content"] == "列表测试记忆内容" for m in data["data"]["memories"])
+
+    def test_list_memories_filter(self, client):
+        """列表支持 category 过滤"""
+        client.post("/api/v1/memories", json={
+            "content": "过滤测试技能项", "type": "semantic",
+            "category": "skill", "importance": 5})
+        resp = client.get("/api/v1/memories", params={"category": "skill"})
+        assert resp.status_code == 200
+        for m in resp.json()["data"]["memories"]:
+            assert m["category"] == "skill"
 
     def test_get_memory_stats_api(self, client):
         """Test getting memory stats via API"""

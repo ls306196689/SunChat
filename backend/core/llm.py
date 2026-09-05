@@ -169,6 +169,37 @@ class OllamaService:
                 raise
             return {"content": "", "tokens_used": 0, "prompt_tokens": 0, "model": resolved_model}
 
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        model: Optional[str] = None,
+    ) -> Generator[str, None, None]:
+        """按完整消息序列（含 system/历史）流式生成，逐块 yield 文本。"""
+        resolved_model = self._resolve_model(model)
+        url = f"{self.base_url}/api/chat"
+        payload = {
+            "model": resolved_model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        try:
+            resp = _post(url, payload, stream=True)
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if line:
+                    try:
+                        data = json.loads(line)
+                        if data.get("done", False):
+                            break
+                        yield data.get("message", {}).get("content", "")
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.error(f"[LLM] chat_stream 失败 (model={resolved_model}): {e}")
+            raise
+
     def embed(self, text: str, model: Optional[str] = None) -> List[float]:
         """生成单条文本嵌入（委托 embedding_service 以复用批量逻辑）。"""
         from core.embedding import embedding_service

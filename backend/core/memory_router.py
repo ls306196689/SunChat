@@ -66,6 +66,19 @@ class MemoryRouter:
         Returns:
             记忆查询分析结果
         """
+        # 规则优先：先跑关键词规则，命中个人相关信号即直接返回（跳过 LLM）
+        rule_result = self._fallback_analysis(user_input)
+        if rule_result.get("needs_memory_query"):
+            logger.info(f"[MEMORY_ROUTER] 规则命中（免 LLM） - 类型:{rule_result.get('recommended_memory_types', [])}, "
+                        f"关键词:{rule_result.get('query_keywords', [])}")
+            return rule_result
+
+        # 规则未命中：短输入（问候语等）信任规则结论；长输入才用 LLM 兜底分析
+        from app.config import settings
+        if not settings.MEMORY_ROUTER_LLM_FALLBACK or len(user_input) < settings.MEMORY_ROUTER_LLM_MIN_LEN:
+            logger.info("[MEMORY_ROUTER] 规则判定无需记忆（短输入/LLM兜底关闭，免 LLM）")
+            return rule_result
+
         # 使用LLM分析用户输入
         prompt = self._build_analysis_prompt(user_input, context)
 

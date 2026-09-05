@@ -1,6 +1,7 @@
 """
 SunChat Backend - Chat Service with Logging
 """
+import threading
 import uuid
 import json
 import re
@@ -11,6 +12,7 @@ from app.config import settings
 from core.llm import ollama_service
 from core.embedding import embedding_service
 from core.search import search_service
+from core.chat_router import chat_router
 from core.memory_router import memory_router
 from core.memory_extractor import memory_extractor
 from services.memory_service import memory_service
@@ -241,198 +243,239 @@ AI 回答: {ai_response}
 
         return system_prompt
 
-    def process_message(self, user_id: int, session_id: int, content: str,
-                       memory_enabled: bool = True, search_enabled: bool = True,
-                       model: str = None) -> Dict:
+    # ==================== 统一上下文构建（非流式/流式共用） ====================
+
+    def get_recent_messages(self, session_id: int, n: int = None) -> List[Dict]:
+        """取最近 n 条历史消息（时间正序），用于多轮上下文。"""
+        n = n or settings.CHAT_HISTORY_MESSAGES
+        rows = (
+            self.db.query(Message)
+            .filter(Message.session_id == session_id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(n)
+            .all()
+        )
+        rows = list(reversed(rows))
+        return [{"role": m.role, "content": m.content} for m in rows
+                if m.role in ("user", "assistant")]
+
+    def build_context(self, user_id: int, session_id: int, content: str,
+                      memory_enabled: bool = True, search_enabled: bool = True) -> Dict:
+        """构建对话上下文：记忆路由/检索 + 搜索接入 + 多轮历史 + 单份 system。
+
+        返回 {system_prompt, history, memory_context, analysis_result, sources}
         """
-        处理用户消息 - 实现文档中的对话流程
+        # 记忆需求分析（规则优先：问候语等 0 LLM 调用）
+        if memory_enabled:
+            analysis_result = memory_router.analyze_memory_need(content)
+        else:
+            analysis_result = {"needs_memory_query": False,
+                               "recommended_memory_types": [], "query_keywords": []}
 
-        流程：
-        1. 用户输入信息
-        2. 构建prompt + 用户输入信息 给llm, 看需要查询什么记忆
-        3. 按照llm提示查询本地记忆
-        4. 本地记忆查询内容 + 用户输入信息 + 记忆提取promote 给到llm
-        5. llm 返回记忆提取内容 以及 对用户输入信息的回复
-        6. 本地服务更新记忆,如果有冲突以最新记忆为准
-
-        Args:
-            user_id: 用户 ID
-            session_id: 会话 ID
-            content: 用户消息内容
-            memory_enabled: 是否启用记忆
-            search_enabled: 是否启用搜索
-            model: 指定聊天模型（可选，默认动态解析/运行时切换值）
-
-        Returns:
-            响应字典
-        """
-        logger.info(f"[CHAT] 开始处理用户消息 - 用户:{user_id}, 会话:{session_id}, 指定模型:{model}")
-
-        # ========== Step 1: 用户输入信息 ==========
-        chat_logger.log_message_send(user_id, session_id, content)
-        logger.info(f"[CHAT] Step 1: 用户输入信息 - 内容:{content[:100]}...")
-
-        # ========== Step 2: 构建prompt + 用户输入信息 给llm, 看需要查询什么记忆 ==========
-        logger.info("[CHAT] Step 2: 分析需要查询的记忆类型")
-        analysis_result = memory_router.analyze_memory_need(content)
-        logger.info(f"[CHAT]   记忆分析完成 - needs_query:{analysis_result.get('needs_memory_query', False)}, "
-                   f"类型:{analysis_result.get('recommended_memory_types', [])}, "
-                   f"关键词:{analysis_result.get('query_keywords', [])}")
-
-        # ========== Step 3: 按照llm提示查询本地记忆 ==========
         memory_context = []
         if memory_enabled and analysis_result.get("needs_memory_query", False):
-            logger.info("[CHAT] Step 3: 查询本地记忆")
             try:
                 memory_context = memory_service.search_memories_by_analysis(
-                    user_id=user_id,
-                    analysis_result=analysis_result,
-                    top_k=5
-                )
-                logger.info(f"[CHAT]   查询到 {len(memory_context)} 条相关记忆")
-                for i, m in enumerate(memory_context[:3]):
-                    logger.debug(f"[CHAT]   记忆{i+1}: {m.get('content', '')[:50]}... (相似度: {m.get('similarity', 0):.2f})")
+                    user_id=user_id, analysis_result=analysis_result, top_k=5)
             except Exception as e:
-                logger.error(f"[CHAT]   查询记忆失败 - 错误:{e}")
+                logger.error(f"[CHAT] 查询记忆失败 - 错误:{e}")
 
-        # ========== Step 4: 本地记忆查询内容 + 用户输入信息 + 记忆提取prompt 给到llm ==========
-        logger.info("[CHAT] Step 4: 构建提取prompt并调用LLM")
-        try:
-            # 构建最终的完整prompt
-            system_prompt = self._build_final_system_prompt(
-                user_input=content,
-                memory_context=memory_context,
-                analysis_result=analysis_result
-            )
+        # 搜索接入：意图路由判定为 search 且开关开启时，执行搜索并归纳进 system
+        sources: List[Dict] = []
+        system_prompt = self._build_final_system_prompt(
+            user_input=content, memory_context=memory_context,
+            analysis_result=analysis_result)
 
-            full_prompt = f"{system_prompt}\n\n用户: {content}\n\nAI:"
-
-            # 调用LLM生成响应
-            logger.info("[CHAT] Step 5: LLM生成响应")
-            response_content = self.generate(full_prompt, system_prompt, model=model)
-            logger.debug(f"[CHAT]   LLM响应长度:{len(response_content)}")
-
-        except Exception as e:
-            logger.error(f"[CHAT]   生成响应失败 - 错误:{e}")
-            # 回退到简单响应
-            system_prompt = "你是一个智能助手。请回答用户问题。"
-            if memory_context:
-                memory_text = "\n".join([f"- {m['content']} (相似度: {m['similarity']:.2f})" for m in memory_context])
-                system_prompt += f"\n\n用户背景信息：\n{memory_text}"
-            full_prompt = f"{system_prompt}\n\n用户: {content}\n\nAI:"
-            response_content = self.generate(full_prompt, system_prompt, model=model)
-
-        # ========== Step 5: LLM返回记忆提取内容以及对用户输入信息的回复 ==========
-        logger.info("[CHAT] Step 6: 处理LLM响应并更新记忆")
-
-        # 解析响应（尝试提取响应中的记忆信息）
-        memory_updates = []
-        if memory_enabled:
+        if search_enabled:
             try:
-                # 使用记忆提取器从对话中提取新记忆
-                extraction_result = memory_extractor.extract_memories(
-                    user_input=content,
-                    ai_response=response_content,
-                    context_memories=memory_context
-                )
-
-                logger.info(f"[CHAT]   提取到 {extraction_result.get('extracted_count', 0)} 条新记忆")
-
-                # ========== Step 6: 本地服务更新记忆,如果有冲突以最新记忆为准 ==========
-                for mem_data in extraction_result.get("memories", []):
-                    try:
-                        logger.debug(f"[CHAT]   更新/创建记忆 - 内容:{mem_data.get('content', '')[:50]}..., 类型:{mem_data.get('type', '')}")
-                        result = memory_service.update_or_create_memory(
-                            user_id=user_id,
-                            content=mem_data.get("content", ""),
-                            memory_type=mem_data.get("type", "semantic"),
-                            category=mem_data.get("category", "general"),
-                            importance=mem_data.get("importance", 5)
-                        )
-                        # 添加action字段到记忆更新中
-                        mem_data["action"] = result.get("action", "created")
-                        memory_updates.append(mem_data)
-                    except Exception as e:
-                        logger.error(f"[CHAT]   更新/创建记忆失败 - 错误:{e}")
-
+                decision = chat_router.route(content, context={"memories": memory_context})
+                if decision.get("tool") == "search":
+                    from services.search_service import search_svc
+                    summary = search_svc.search_with_introduction(content, memory_context)
+                    answer = summary.get("answer", "")
+                    sources = summary.get("sources", [])
+                    if answer and sources:
+                        refs = "\n".join(
+                            f"- {s.get('title', '')} ({s.get('url', '')})"
+                            for s in sources[:3])
+                        system_prompt += (
+                            f"\n\n联网搜索结果（回答时请综合并在需要时注明来源）：\n{answer}\n"
+                            f"来源：\n{refs}")
             except Exception as e:
-                logger.error(f"[CHAT]   记忆处理失败 - 错误:{e}")
+                logger.warning(f"[CHAT] 搜索接入失败（忽略）: {e}")
 
-        # 存储用户消息
-        user_msg = Message(
-            session_id=session_id,
-            role="user",
-            content=content
-        )
-        self.db.add(user_msg)
+        return {
+            "system_prompt": system_prompt,
+            "history": self.get_recent_messages(session_id),
+            "memory_context": memory_context,
+            "analysis_result": analysis_result,
+            "sources": sources,
+        }
+
+    def to_chat_messages(self, ctx: Dict, content: str) -> List[Dict]:
+        """转成 Ollama /api/chat 消息序列：system 单份 + 多轮历史 + 当前输入。"""
+        messages = [{"role": "system", "content": ctx["system_prompt"]}]
+        messages += [{"role": m["role"], "content": m["content"]} for m in ctx["history"]]
+        messages.append({"role": "user", "content": content})
+        return messages
+
+    def save_user_message(self, session_id: int, content: str) -> Message:
+        msg = Message(session_id=session_id, role="user", content=content)
+        self.db.add(msg)
         self.db.commit()
-        logger.debug(f"[CHAT] 用户消息已存储")
+        return msg
 
-        # 存储AI消息
-        ai_msg = Message(
-            session_id=session_id,
-            role="assistant",
-            content=response_content,
-            raw_response=response_content
-        )
-        self.db.add(ai_msg)
+    def save_assistant_message(self, session_id: int, content: str,
+                               tokens_used: int = 0) -> Message:
+        msg = Message(session_id=session_id, role="assistant", content=content,
+                      raw_response=content, tokens_used=tokens_used)
+        self.db.add(msg)
         self.db.commit()
-        logger.debug(f"[CHAT] AI消息已存储")
+        return msg
 
-        logger.info(f"[CHAT] 处理完成 - 响应长度:{len(response_content)}, 新记忆:{len(memory_updates)}")
-        chat_logger.log_ai_response(user_id, session_id, len(response_content), len(memory_updates))
+    def apply_memory_extraction(self, user_id: int, content: str,
+                                response_content: str,
+                                memory_context: List[Dict]) -> List[Dict]:
+        """执行记忆提取并落库（冲突以新为准），返回 memory_updates 列表。"""
+        memory_updates: List[Dict] = []
+        try:
+            extraction_result = memory_extractor.extract_memories(
+                user_input=content,
+                ai_response=response_content,
+                context_memories=memory_context,
+            )
+            for mem_data in extraction_result.get("memories", []):
+                try:
+                    result = memory_service.update_or_create_memory(
+                        user_id=user_id,
+                        content=mem_data.get("content", ""),
+                        memory_type=mem_data.get("type", "semantic"),
+                        category=mem_data.get("category", "general"),
+                        importance=mem_data.get("importance", 5),
+                    )
+                    mem_data["action"] = result.get("action", "created")
+                    memory_updates.append(mem_data)
+                except Exception as e:
+                    logger.error(f"[CHAT] 更新/创建记忆失败 - 错误:{e}")
+        except Exception as e:
+            logger.error(f"[CHAT] 记忆处理失败 - 错误:{e}")
+        return memory_updates
+
+    def extract_memories_async(self, user_id: int, content: str,
+                               response_content: str,
+                               memory_context: List[Dict]):
+        """后台守护线程执行记忆提取，不阻塞响应；失败只记日志。"""
+        def _job():
+            try:
+                self.apply_memory_extraction(user_id, content, response_content,
+                                             memory_context)
+            except Exception as e:
+                logger.error(f"[CHAT] 后台记忆提取失败: {e}")
+            finally:
+                # 释放本后台线程的 Session，避免连接泄漏
+                try:
+                    from models.sql_models import reset_thread_session
+                    reset_thread_session()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_job, name="memory-extractor", daemon=True)
+        t.start()
+        return t
+
+    def process_message(self, user_id: int, session_id: int, content: str,
+                       memory_enabled: bool = True, search_enabled: bool = True,
+                       model: str = None, extract_memory_inline: bool = False) -> Dict:
+        """
+        处理用户消息（优化后流程）:
+        1. 构建上下文：规则优先记忆路由 → 记忆检索 → 可选搜索接入 → 多轮历史
+        2. system 单份注入，LLM 生成一次（真实 token 计数；失败抛出不吞）
+        3. 落库 user + assistant(含 tokens_used)
+        4. 记忆提取默认异步（后台线程），extract_memory_inline=True 时同步执行
+
+        Args / Returns: 同原接口，另 memory_updates 在异步模式下为 []（稍后落库）。
+        """
+        logger.info(f"[CHAT] 开始处理用户消息 - 用户:{user_id}, 会话:{session_id}, 指定模型:{model}")
+        chat_logger.log_message_send(user_id, session_id, content)
+
+        ctx = self.build_context(user_id, session_id, content,
+                                 memory_enabled=memory_enabled,
+                                 search_enabled=search_enabled)
+        messages = self.to_chat_messages(ctx, content)
+
+        raw = ollama_service.chat(messages, model=model)
+        response_content = raw.get("message", {}).get("content", "")
+        tokens_used = raw.get("eval_count", 0)
+        if not response_content:
+            raise RuntimeError("LLM 返回空内容（服务可能不可用）")
+
+        self.save_user_message(session_id, content)
+        self.save_assistant_message(session_id, response_content, tokens_used)
+
+        if memory_enabled:
+            if extract_memory_inline:
+                memory_updates = self.apply_memory_extraction(
+                    user_id, content, response_content, ctx["memory_context"])
+            else:
+                self.extract_memories_async(
+                    user_id, content, response_content, ctx["memory_context"])
+                memory_updates = []
+        else:
+            memory_updates = []
+
+        logger.info(f"[CHAT] 处理完成 - 响应长度:{len(response_content)}, tokens:{tokens_used}")
+        chat_logger.log_ai_response(user_id, session_id, len(response_content),
+                                    len(memory_updates))
 
         return {
             "response": response_content,
             "memory_updates": memory_updates,
-            "memory_context": memory_context,
-            "analysis_result": analysis_result,
-            "tokens_used": len(response_content) // 4
+            "memory_context": ctx["memory_context"],
+            "analysis_result": ctx["analysis_result"],
+            "sources": ctx["sources"],
+            "tokens_used": tokens_used
         }
 
-    def process_message_stream(self, user_id: int, session_id: int, content: str,
-                       memory_enabled: bool = True, search_enabled: bool = True) -> AsyncGenerator[str, None]:
-        """
-        处理用户消息（流式）
+    # ==================== 会话管理（S6：真实落库） ====================
 
-        Args:
-            user_id: 用户 ID
-            session_id: 会话 ID
-            content: 用户消息内容
-            memory_enabled: 是否启用记忆
-            search_enabled: 是否启用搜索
+    def rename_session(self, session_id: int, title: str) -> bool:
+        session = self.db.query(ChatSession).filter(
+            ChatSession.id == session_id,
+            ChatSession.deleted_at == None  # noqa: E711
+        ).first()
+        if not session:
+            return False
+        session.title = title
+        self.db.commit()
+        return True
 
-        Yields:
-            流式响应内容
-        """
-        # 构建记忆上下文
-        memory_context = []
+    def delete_session(self, session_id: int) -> bool:
+        """软删除（与 list_sessions 的 deleted_at == None 过滤一致）。"""
+        session = self.db.query(ChatSession).filter(
+            ChatSession.id == session_id,
+            ChatSession.deleted_at == None  # noqa: E711
+        ).first()
+        if not session:
+            return False
+        session.deleted_at = datetime.now()
+        self.db.commit()
+        return True
+
+    # ==================== 流式（S5 共用上下文构建） ====================
+
+    def stream_reply(self, ctx: Dict, content: str, model: str = None):
+        """按上下文流式生成（同步 generator，逐块 yield 文本）。"""
+        return ollama_service.chat_stream(self.to_chat_messages(ctx, content),
+                                          model=model)
+
+    def finalize_stream(self, user_id: int, session_id: int, content: str, full: str,
+                        ctx: Dict, memory_enabled: bool = True):
+        """流结束收尾：存 assistant 消息 + 后台记忆提取。"""
+        self.save_assistant_message(
+            session_id, full, tokens_used=max(1, len(full) // 4))
         if memory_enabled:
-            memory_context = self.build_memory_context(
-                user_id=user_id,
-                query=content,
-                top_k=3
-            )
-
-        # 构建搜索上下文
-        search_context = None
-        if search_enabled:
-            search_context = self.build_search_context(content, memory_context)
-
-        # 构建 prompt
-        system_prompt = "你是一个智能助手。请回答用户问题。"
-
-        if memory_context:
-            memory_text = "\n".join([f"- {m['content']} (相似度: {m['similarity']:.2f})" for m in memory_context])
-            system_prompt += f"\n\n用户背景信息（基于语义检索的记忆）：\n{memory_text}"
-
-        if search_context and search_context.get("query"):
-            system_prompt += f"\n\n搜索上下文：{search_context['query']}"
-
-        full_prompt = f"{system_prompt}\n\n用户: {content}\n\nAI:"
-
-        # 生成流式响应
-        return ollama_service.generate(full_prompt, system_prompt, stream=True)
+            self.extract_memories_async(user_id, content, full, ctx["memory_context"])
+        chat_logger.log_ai_response(user_id, session_id, len(full), 0)
 
 
 # 全局实例

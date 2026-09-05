@@ -16,6 +16,15 @@ import re
 from typing import Dict, List
 
 FAKE_CHAT_MODELS = [{"name": "qwen2.5:7b"}, {"name": "nomic-embed-text"}]
+# 调用计数与最近 payload 捕获（供测试断言 0 LLM / system 单份 / 多轮历史）
+CALLS = {"chat": 0, "embed": 0}
+LAST_CHAT_PAYLOADS: List[Dict] = []
+
+
+def reset_calls():
+    CALLS["chat"] = 0
+    CALLS["embed"] = 0
+    LAST_CHAT_PAYLOADS.clear()
 FAKE_SEARCH_RESULTS = [
     {"title": "Python 语言介绍", "href": "http://example.com/py", "url": "http://example.com/py",
      "body": "Python 是一种解释型编程语言。", "snippet": "Python 是一种解释型编程语言。"},
@@ -116,6 +125,8 @@ def dispatch(url: str, payload: Dict, stream: bool = False) -> FakeResponse:
     if url.endswith("/api/tags"):
         return FakeResponse({"models": FAKE_CHAT_MODELS})
     if url.endswith("/api/chat"):
+        CALLS["chat"] += 1
+        LAST_CHAT_PAYLOADS.append(payload)
         reply = fake_chat_reply(payload)
         if stream:
             lines = []

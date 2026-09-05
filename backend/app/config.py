@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本
     SEARCH_TIMEOUT: int = 10  # 搜索超时（秒）
 
+    # 对话流程配置
+    CHAT_HISTORY_MESSAGES: int = 6   # 多轮上下文携带的最近消息条数
+    MEMORY_ROUTER_LLM_FALLBACK: bool = True  # 规则未命中且输入较长时才用 LLM 兜底分析
+    MEMORY_ROUTER_LLM_MIN_LEN: int = 12  # 低于此长度的输入直接信任规则（问候语等 0 LLM）
+
     class Config:
         env_file = ".env"
         case_sensitive = True

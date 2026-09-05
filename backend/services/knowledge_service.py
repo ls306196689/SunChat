@@ -10,7 +10,8 @@ import os
 from app.config import settings
 from core.embedding import embedding_service
 from core.document_parser import document_parser
-from models.sql_models import get_db, KBFile, KBChunk
+from models.sql_models import DBSessionMixin, KBFile, KBChunk
+from utils.logger import logger
 
 
 class ChromaKnowledgeClient:
@@ -47,13 +48,18 @@ class ChromaKnowledgeClient:
             metadatas=metadatas or []
         )
 
-    def query(self, query_embeddings: List[List[float]], n_results: int = 5) -> Dict:
-        """查询相似向量"""
+    def query(self, query_embeddings: List[List[float]], n_results: int = 5,
+              where: Dict = None) -> Dict:
+        """查询相似向量（支持 where 过滤，如用户/文件隔离）"""
         collection = self._get_collection()
-        return collection.query(
-            query_embeddings=query_embeddings,
-            n_results=n_results
-        )
+        kwargs = {
+            "query_embeddings": query_embeddings,
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where:
+            kwargs["where"] = where
+        return collection.query(**kwargs)
 
     def delete(self, ids: List[str]):
         """删除向量"""
@@ -74,22 +80,22 @@ class ChromaKnowledgeClient:
             pass
 
 
-class KnowledgeService:
-    """知识库服务"""
+class KnowledgeService(DBSessionMixin):
+    """知识库服务（db 属性见 DBSessionMixin：线程本地 Session）"""
 
     def __init__(self):
-        self.db = next(get_db())
         self.chroma_client = ChromaKnowledgeClient()
 
     def upload_file(self, user_id: int, filename: str, original_name: str,
-                    file_type: str, file_size: int) -> Dict:
-        """上传文件（仅记录元数据）"""
+                    file_type: str, file_size: int, storage_path: str = None) -> Dict:
+        """上传文件（记录元数据；storage_path 为落盘路径，由路由写入后传入）"""
         kb_file = KBFile(
             user_id=user_id,
             filename=filename,
             original_name=original_name,
             file_type=file_type,
             file_size=file_size,
+            storage_path=storage_path,
             status="uploading"
         )
         self.db.add(kb_file)
@@ -125,45 +131,28 @@ class KnowledgeService:
 
             # 解析文档
             chunks = document_parser.parse(file_path, file_type)
+            if not chunks:
+                raise ValueError("文档解析无内容")
 
-            # 生成向量并存储到 Chroma
-            vector_ids = []
-            content_list = []
-            metadata_list = []
-
-            for i, chunk in enumerate(chunks):
-                content = chunk["content"]
-                # 生成嵌入向量
-                try:
-                    embedding = embedding_service.embed(content)
-                except Exception as e:
-                    print(f"Embedding error for chunk {i}: {e}")
-                    # 使用空向量作为回退
-                    embedding = [0.0] * 768  # 假设 768 维
-
-                chunk_vector_id = f"kb_{file_id}_chunk_{i}_{uuid.uuid4().hex[:8]}"
-                vector_ids.append(chunk_vector_id)
-                content_list.append(content)
-                metadata_list.append({
-                    "file_id": file_id,
-                    "chunk_index": i,
-                    "page_number": chunk.get("page_number", 1),
-                    "char_count": chunk.get("char_count", 0),
-                    "word_count": chunk.get("word_count", 0)
-                })
+            # 批量生成向量（修复双重 embed；失败则整个文件标记 failed）
+            content_list = [c["content"] for c in chunks]
+            embeddings = embedding_service.embed_batch(content_list)
+            vector_ids = [f"kb_{file_id}_chunk_{i}_{uuid.uuid4().hex[:8]}" for i in range(len(chunks))]
+            metadata_list = [{
+                "user_id": kb_file.user_id,  # 用户隔离
+                "file_id": file_id,
+                "chunk_index": i,
+                "page_number": c.get("page_number", 1),
+            } for i, c in enumerate(chunks)]
 
             # 写入 Chroma
             if content_list:
-                try:
-                    self.chroma_client.add(
-                        ids=vector_ids,
-                        documents=content_list,
-                        embeddings=[embedding_service.embed(c) for c in content_list],
-                        metadatas=metadata_list
-                    )
-                except Exception as e:
-                    print(f"Chroma write error: {e}")
-                    # 如果 Chroma 写入失败，继续使用 SQLite
+                self.chroma_client.add(
+                    ids=vector_ids,
+                    documents=content_list,
+                    embeddings=embeddings,
+                    metadatas=metadata_list
+                )
 
             # 保存分块到 SQLite
             for i, chunk in enumerate(chunks):
@@ -209,9 +198,16 @@ class KnowledgeService:
 
         # 删除之前的分块
         self.db.query(KBChunk).filter(KBChunk.file_id == file_id).delete()
+        if kb_file.vector_ids:
+            try:
+                self.chroma_client.delete(kb_file.vector_ids)
+            except Exception as e:
+                logger.warning(f"[KB] 重试前清理 Chroma 向量失败: {e}")
 
-        # 重新处理
-        return self.process_file(file_id, f"./data/uploads/{kb_file.filename}", kb_file.file_type)
+        # 重新处理（使用落盘路径）
+        if not kb_file.storage_path or not os.path.exists(kb_file.storage_path):
+            return {"error": "文件不存在，无法重试", "file_id": file_id}
+        return self.process_file(file_id, kb_file.storage_path, kb_file.file_type)
 
     def get_files(self, user_id: int, status: str = None) -> List[Dict]:
         """获取文件列表"""
@@ -248,14 +244,22 @@ class KnowledgeService:
             try:
                 self.chroma_client.delete(kb_file.vector_ids)
             except Exception as e:
-                print(f"Chroma delete error: {e}")
+                logger.warning(f"[KB] Chroma 删除失败: {e}")
 
         # 删除分块
         self.db.query(KBChunk).filter(KBChunk.file_id == file_id).delete()
 
         # 删除文件记录
+        storage_path = kb_file.storage_path
         self.db.delete(kb_file)
         self.db.commit()
+
+        # 删除物理文件
+        if storage_path and os.path.exists(storage_path):
+            try:
+                os.remove(storage_path)
+            except Exception as e:
+                logger.warning(f"[KB] 物理文件删除失败 {storage_path}: {e}")
 
         return True
 
@@ -332,7 +336,7 @@ class KnowledgeService:
                 results = self._search_knowledge_sqlite(user_id, query, file_ids, top_k)
 
         except Exception as e:
-            print(f"Knowledge search error: {e}")
+            logger.warning(f"[KB] 搜索失败，回退 SQLite: {e}")
             results = self._search_knowledge_sqlite(user_id, query, file_ids, top_k)
 
         return results

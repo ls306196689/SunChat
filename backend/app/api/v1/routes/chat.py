@@ -39,7 +39,7 @@ class StreamResponse(BaseModel):
 
 
 @router.post("/chat/messages")
-async def create_message(request: ChatRequest):
+def create_message(request: ChatRequest):
     """
     发送消息 - 实现完整的对话流程
 
@@ -82,14 +82,13 @@ async def create_message(request: ChatRequest):
 
 
 @router.get("/chat/sessions")
-async def list_sessions():
+def list_sessions():
     """获取会话列表"""
-    from models.sql_models import ChatSession, get_db
-    db = next(get_db())
+    from models.sql_models import ChatSession, get_thread_session
+    db = get_thread_session()
     sessions = db.query(ChatSession).filter(
         ChatSession.deleted_at == None
     ).order_by(ChatSession.updated_at.desc()).limit(50).all()
-    db.close()
     return {
         "code": 200,
         "message": "success",
@@ -105,7 +104,7 @@ async def list_sessions():
 
 
 @router.post("/chat/sessions")
-async def create_session():
+def create_session():
     """创建会话"""
     session = chat_service.create_session(user_id=1)
     return {
@@ -116,7 +115,7 @@ async def create_session():
 
 
 @router.get("/chat/sessions/{session_id}/messages")
-async def get_messages(session_id: str, page: int = 1, page_size: int = 20):
+def get_messages(session_id: str, page: int = 1, page_size: int = 20):
     """获取消息历史"""
     messages = chat_service.get_messages(
         session_id=int(session_id),
@@ -131,7 +130,7 @@ async def get_messages(session_id: str, page: int = 1, page_size: int = 20):
 
 
 @router.patch("/chat/sessions/{session_id}")
-async def update_session(session_id: str, title: str):
+def update_session(session_id: str, title: str):
     """更新会话标题"""
     return {
         "code": 200,
@@ -141,7 +140,7 @@ async def update_session(session_id: str, title: str):
 
 
 @router.delete("/chat/sessions/{session_id}")
-async def delete_session(session_id: str):
+def delete_session(session_id: str):
     """删除会话"""
     return {
         "code": 200,

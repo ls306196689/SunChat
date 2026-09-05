@@ -14,16 +14,16 @@ from core.search import search_service
 from core.memory_router import memory_router
 from core.memory_extractor import memory_extractor
 from services.memory_service import memory_service
-from models.sql_models import get_db, ChatSession, Message
+from models.sql_models import DBSessionMixin, ChatSession, Message
 from models.schemas import MessageCreate, MemoryResponse
 from utils.logger import chat_logger, memory_logger, logger
 
 
-class ChatService:
-    """聊天服务"""
+class ChatService(DBSessionMixin):
+    """聊天服务（db 属性见 DBSessionMixin：线程本地 Session）"""
 
     def __init__(self):
-        self.db = next(get_db())
+        pass
 
     def create_session(self, user_id: int, title: str = None) -> Dict:
         """创建会话"""

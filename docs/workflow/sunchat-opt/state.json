@@ -1,0 +1,170 @@
+{
+  "project": "sunchat-opt",
+  "phase": "execute",
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-05T22:18:30+08:00",
+      "confirmed_by": "user",
+      "note": "沿用优化方案00~09基线(2026-08-23已确认)"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-05T22:18:30+08:00",
+      "confirmed_by": "user",
+      "note": "沿用既有架构,无新架构决策"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-05T22:18:30+08:00",
+      "confirmed_by": "user",
+      "note": "按模块修复,无新模块接口"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-05T22:18:30+08:00",
+      "confirmed_by": "user",
+      "note": "S1-S9全部执行+chore(wip)存档"
+    }
+  ],
+  "clarifications": [
+    {
+      "id": 1,
+      "question": "需求是否沿用 docs/优化方案/00~09(2026-08-23 已确认基线)?",
+      "resolution": "沿用,续作收敛剩余项",
+      "status": "closed"
+    },
+    {
+      "id": 2,
+      "question": "批次0存量未提交改动如何处置?",
+      "resolution": "chore(wip) 存档提交",
+      "status": "closed"
+    }
+  ],
+  "modules": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "测试离线化守卫(mock LLM/embed, 全量pytest可跑)",
+      "module": "tests",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 2,
+      "title": "KB管道修断(落盘+后台处理+where过滤+delete+sqlite遮蔽)",
+      "module": "knowledge",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 3,
+      "title": "记忆修断(列表API+冲突以新为准+user隔离)",
+      "module": "memory",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 4,
+      "title": "对话降本(规则优先路由+去双注入+多轮+搜索接入+异步提取+json_parser落地)",
+      "module": "chat",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 5,
+      "title": "SSE流式端点+前端流式渲染",
+      "module": "chat/frontend",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 6,
+      "title": "会话PATCH/DELETE真实现",
+      "module": "chat",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 7,
+      "title": "认证诚实化+user_id收敛+sanitize接线",
+      "module": "auth/security",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 8,
+      "title": "Agent原生tool_calls重写+端点+回退",
+      "module": "agent",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 9,
+      "title": "仓库卫生+全量测试终跑+文档执行结果",
+      "module": "infra",
+      "status": "pending",
+      "verified": false
+    }
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "Ollama/嵌入在测试环境不可用或超慢(本机112GB模型致pytest挂死)",
+      "prob": "高",
+      "impact": "高",
+      "mitigation": "测试全部 mock LLM/embedding 网络层;实机验证单列",
+      "status": "open"
+    },
+    {
+      "id": "R-2",
+      "desc": "Chroma 版本 where 过滤/集合行为差异",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "过滤失败回退 sqlite 路径已有,补用例覆盖",
+      "status": "open"
+    },
+    {
+      "id": "R-3",
+      "desc": "规则优先路由误判降低记忆命中率",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "规则未命中仍走 LLM;规则命中时保留关键词检索",
+      "status": "open"
+    },
+    {
+      "id": "R-4",
+      "desc": "SSE 经 vite 代理/测试客户端行为差异",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "TestClient 逐帧断言;前端保留非流式回退",
+      "status": "open"
+    },
+    {
+      "id": "R-5",
+      "desc": "删假 auth 破坏前端既有调用",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "保留 whoami;前端未依赖 register/login 实际功能",
+      "status": "open"
+    },
+    {
+      "id": "R-6",
+      "desc": "模型不支持原生 tool_calls 或响应不合规",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "解析失败纯文本 ReAct 回退;max_iterations 兜底",
+      "status": "open"
+    }
+  ],
+  "repo": {
+    "created": false,
+    "remote": null,
+    "branch": "main",
+    "last_pushed_commit": null,
+    "push_pending": false
+  },
+  "updated_at": "2026-09-05T22:18:30+08:00"
+}

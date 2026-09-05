@@ -41,7 +41,10 @@ def setup_test_environment():
         importlib.reload(app.config)
 
         # Import after environment is set
-        from models.sql_models import init_db
+        from models.sql_models import init_db, reset_engine
+
+        # 重建 engine（删库后旧连接仍指向旧文件，必须 dispose 重建）
+        reset_engine()
 
         # Initialize test database
         init_db()

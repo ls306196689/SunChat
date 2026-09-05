@@ -11,7 +11,7 @@ from core.embedding import embedding_service
 from core.llm import ollama_service
 from core.memory_router import memory_router
 from core.model_manager import model_manager
-from models.sql_models import get_db, Memory, Emotion
+from models.sql_models import DBSessionMixin, Memory, Emotion
 from models.schemas import MemoryCreate, MemoryUpdate
 from utils.logger import memory_logger, logger
 
@@ -102,11 +102,10 @@ class ChromaClient:
             self._collection = None
 
 
-class MemoryService:
-    """记忆服务"""
+class MemoryService(DBSessionMixin):
+    """记忆服务（db 属性见 DBSessionMixin：线程本地 Session）"""
 
     def __init__(self):
-        self.db = next(get_db())
         self.chroma_client = ChromaClient()
 
     def create_memory(
@@ -325,7 +324,7 @@ class MemoryService:
             try:
                 self.chroma_client.delete([memory.vector_id])
             except Exception as e:
-                print(f"Chroma delete error: {e}")
+                logger.warning(f"[MEMORY] Chroma 删除失败: {e}")
 
         # 从 SQLite 删除
         memory.is_active = False

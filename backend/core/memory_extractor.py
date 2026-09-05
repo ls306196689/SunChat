@@ -28,7 +28,7 @@ class MemoryExtractor:
             "event": "event",
             "knowledge": "knowledge",
             "relationship": "relationship",
-            "habbit": "habbit",
+            "habit": "habit",
             "general": "general"
         }
 

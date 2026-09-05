@@ -11,7 +11,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.knowledge_service import KnowledgeService, ChromaKnowledgeClient
-from models.sql_models import init_db, get_db
+from models.sql_models import init_db, get_db, reset_engine
 from core.document_parser import document_parser
 
 
@@ -37,6 +37,9 @@ def setup_test_environment():
 
     if os.path.exists(test_chroma_path):
         shutil.rmtree(test_chroma_path)
+
+    # 重建 engine（删库后旧连接仍指向旧文件）
+    reset_engine()
 
     # Initialize test database
     init_db()

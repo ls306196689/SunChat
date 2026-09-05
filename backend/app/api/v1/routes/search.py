@@ -26,7 +26,7 @@ class SearchResponse(BaseModel):
 
 
 @router.post("/search")
-async def perform_search(request: SearchRequest):
+def perform_search(request: SearchRequest):
     """执行搜索"""
     try:
         # 检索记忆
@@ -48,8 +48,8 @@ async def perform_search(request: SearchRequest):
         )
 
         # 保存搜索历史
-        from models.sql_models import get_db, SearchHistory
-        db = next(get_db())
+        from models.sql_models import get_thread_session, SearchHistory
+        db = get_thread_session()
         search_history = SearchHistory(
             user_id=1,
             query=request.query,
@@ -59,7 +59,6 @@ async def perform_search(request: SearchRequest):
         db.add(search_history)
         db.commit()
         db.refresh(search_history)
-        db.close()
 
         return {
             "code": 200,
@@ -76,17 +75,16 @@ async def perform_search(request: SearchRequest):
 
 
 @router.get("/search/history")
-async def list_search_history(page: int = 1, page_size: int = 20):
+def list_search_history(page: int = 1, page_size: int = 20):
     """列出搜索历史"""
-    from models.sql_models import SearchHistory, get_db
-    db = next(get_db())
+    from models.sql_models import SearchHistory, get_thread_session
+    db = get_thread_session()
     offset = (page - 1) * page_size
     history = db.query(SearchHistory).order_by(
         SearchHistory.created_at.desc()
     ).offset(offset).limit(page_size).all()
 
     total = db.query(SearchHistory).count()
-    db.close()
 
     return {
         "code": 200,
@@ -110,7 +108,7 @@ async def list_search_history(page: int = 1, page_size: int = 20):
 
 
 @router.get("/search/suggest")
-async def search_suggestions(q: str):
+def search_suggestions(q: str):
     """搜索建议"""
     return {
         "code": 200,

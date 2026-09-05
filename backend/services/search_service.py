@@ -4,6 +4,7 @@ SunChat Backend - Search Service Wrapper
 from typing import List, Dict
 from core.search import search_service
 from core.llm import ollama_service
+from utils.logger import logger
 
 
 class SearchService:
@@ -114,7 +115,7 @@ class SearchService:
             answer = ollama_service.generate(prompt)
             return answer.strip()
         except Exception as e:
-            print(f"LLM answer generation error: {e}")
+            logger.warning(f"[SEARCH] LLM 归纳失败，回退到摘要: {e}")
             # 回退到使用第一个结果的摘要
             return f"根据搜索结果，关于'{query}'的信息如下：\n\n{context[:500]}..."
 

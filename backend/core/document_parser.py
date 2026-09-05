@@ -68,16 +68,16 @@ class DocumentParser:
     def _parse_pdf(self, file_path: str) -> List[Dict]:
         """解析 PDF 文件"""
         try:
-            import PyPDF2
+            import pypdf
         except ImportError:
             raise ImportError(
-                "PyPDF2 未安装。请运行: pip install PyPDF2"
+                "pypdf 未安装。请运行: pip install pypdf"
             )
 
         chunks = []
         try:
             with open(file_path, "rb") as file:
-                reader = PyPDF2.PdfReader(file)
+                reader = pypdf.PdfReader(file)
 
                 for page_num, page in enumerate(reader.pages, 1):
                     text = page.extract_text() or ""

@@ -17,7 +17,7 @@ class SwitchModelRequest(BaseModel):
 
 
 @router.get("/models")
-async def get_models():
+def get_models():
     """获取真实可用模型列表 + 当前模型 + 向量库状态"""
     try:
         status = model_manager.get_status()
@@ -32,7 +32,7 @@ async def get_models():
 
 
 @router.post("/models/chat")
-async def switch_chat_model(req: SwitchModelRequest):
+def switch_chat_model(req: SwitchModelRequest):
     """切换聊天模型（运行时，持久化）"""
     try:
         result = model_manager.set_chat_model(req.model)
@@ -45,7 +45,7 @@ async def switch_chat_model(req: SwitchModelRequest):
 
 
 @router.post("/models/embedding")
-async def switch_embedding_model(req: SwitchModelRequest):
+def switch_embedding_model(req: SwitchModelRequest):
     """切换嵌入模型（运行时，持久化），返回是否需要重建向量库"""
     try:
         result = model_manager.set_embedding_model(req.model)
@@ -58,7 +58,7 @@ async def switch_embedding_model(req: SwitchModelRequest):
 
 
 @router.post("/models/rebuild-vectors")
-async def rebuild_vectors():
+def rebuild_vectors():
     """重建向量库（切换嵌入模型后保证检索准确）"""
     try:
         logger.info("[MODELS] 触发向量库重建")

@@ -12,7 +12,7 @@ security = HTTPBearer()
 
 # 简化实现：本地模式不需要真实认证
 @router.post("/register")
-async def register(request: BaseModel):
+def register(request: BaseModel):
     """用户注册（本地模式简化）"""
     return {
         "code": 201,
@@ -22,7 +22,7 @@ async def register(request: BaseModel):
 
 
 @router.post("/login")
-async def login(request: BaseModel):
+def login(request: BaseModel):
     """用户登录（本地模式简化）"""
     return {
         "code": 200,
@@ -36,7 +36,7 @@ async def login(request: BaseModel):
 
 
 @router.get("/me")
-async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def get_me(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """获取当前用户"""
     return {
         "code": 200,

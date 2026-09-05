@@ -10,7 +10,7 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.memory_service import MemoryService, ChromaClient
-from models.sql_models import init_db, get_db, Memory, Emotion
+from models.sql_models import init_db, get_db, reset_engine, Memory, Emotion
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -27,6 +27,9 @@ def setup_test_environment():
 
     if os.path.exists(test_chroma_path):
         shutil.rmtree(test_chroma_path)
+
+    # 重建 engine（删库后旧连接仍指向旧文件）
+    reset_engine()
 
     # Initialize test database
     init_db()

@@ -25,7 +25,7 @@ class MemorySearchRequest(BaseModel):
 
 
 @router.get("/memories")
-async def list_memories(
+def list_memories(
     type: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     page: int = Query(1),
@@ -44,7 +44,7 @@ async def list_memories(
 
 
 @router.post("/memories/search")
-async def search_memories(request: MemorySearchRequest):
+def search_memories(request: MemorySearchRequest):
     """搜索记忆"""
     try:
         result = memory_service.search_memories(
@@ -66,7 +66,7 @@ async def search_memories(request: MemorySearchRequest):
 
 
 @router.post("/memories")
-async def create_memory(request: MemoryCreateRequest):
+def create_memory(request: MemoryCreateRequest):
     """创建记忆"""
     try:
         memory = memory_service.create_memory(
@@ -87,7 +87,7 @@ async def create_memory(request: MemoryCreateRequest):
 
 
 @router.put("/memories/{memory_id}")
-async def update_memory(memory_id: str, request: MemoryCreateRequest):
+def update_memory(memory_id: str, request: MemoryCreateRequest):
     """更新记忆"""
     try:
         result = memory_service.update_memory(
@@ -108,7 +108,7 @@ async def update_memory(memory_id: str, request: MemoryCreateRequest):
 
 
 @router.delete("/memories/{memory_id}")
-async def delete_memory(memory_id: str):
+def delete_memory(memory_id: str):
     """删除记忆"""
     try:
         result = memory_service.delete_memory(memory_id)
@@ -126,7 +126,7 @@ async def delete_memory(memory_id: str):
 
 
 @router.get("/memories/stats")
-async def get_memory_stats():
+def get_memory_stats():
     """获取记忆统计"""
     try:
         stats = memory_service.get_stats(user_id=1)

@@ -16,7 +16,7 @@ class KBQuestionRequest(BaseModel):
 
 
 @router.post("/kb/upload")
-async def upload_file(file: UploadFile = File(...)):
+def upload_file(file: UploadFile = File(...)):
     """上传文件到知识库"""
     try:
         # 获取文件信息
@@ -24,8 +24,8 @@ async def upload_file(file: UploadFile = File(...)):
         file_type = filename.split(".")[-1] if "." in filename else "unknown"
         file_size = 0
 
-        # 读取文件内容计算大小
-        content = await file.read()
+        # 读取文件内容计算大小（同步读取，路由为 def 在线程池执行）
+        content = file.file.read()
         file_size = len(content)
 
         # 保存记录
@@ -47,7 +47,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 @router.get("/kb/files")
-async def list_files(status: str = None):
+def list_files(status: str = None):
     """列出知识库文件"""
     try:
         files = knowledge_service.get_files(user_id=1, status=status)
@@ -61,7 +61,7 @@ async def list_files(status: str = None):
 
 
 @router.delete("/kb/files/{file_id}")
-async def delete_file(file_id: int):
+def delete_file(file_id: int):
     """删除知识库文件"""
     return {
         "code": 200,
@@ -71,7 +71,7 @@ async def delete_file(file_id: int):
 
 
 @router.post("/kb/qa")
-async def knowledge_qa(request: KBQuestionRequest):
+def knowledge_qa(request: KBQuestionRequest):
     """知识库问答"""
     try:
         result = knowledge_service.qa(

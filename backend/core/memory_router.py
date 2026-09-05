@@ -49,7 +49,7 @@ class MemoryRouter:
                 "keywords": ["朋友", "家人", "同事", "老板", "同学", "认识", "认识谁"]
             },
             {
-                "type": "habbit",
+                "type": "habit",
                 "description": "习惯和日常行为",
                 "keywords": ["习惯", "总是", "经常", "每天", "每周", "习惯性"]
             }
@@ -104,7 +104,7 @@ class MemoryRouter:
 请以 JSON 格式输出分析结果：
 {{
     "needs_memory": true/false,
-    "memory_types": ["type1", "type2"],  // 从以下类型中选择：preference(偏好), person(个人信息), event(事件), knowledge(知识), relationship(关系), habbit(习惯), general(通用)
+    "memory_types": ["type1", "type2"],  // 从以下类型中选择：preference(偏好), person(个人信息), event(事件), knowledge(知识), relationship(关系), habit(习惯), general(通用)
     "query_keywords": ["关键词1", "关键词2"],  // 用于记忆检索的关键词，应该是2-5个相关词
     "confidence": 0.0-1.0,  // 分析置信度
     "notes": "分析说明"
@@ -117,7 +117,7 @@ class MemoryRouter:
 4. 如果用户询问关于自己过去的事情（昨天、今天、最近），memory_types 应包含 "event"
 5. 如果用户询问偏好或喜好，memory_types 应包含 "preference"
 6. 如果用户询问人际关系，memory_types 应包含 "relationship"
-7. 如果用户询问习惯，memory_types 应包含 "habbit"
+7. 如果用户询问习惯，memory_types 应包含 "habit"
 8. query_keywords 应该是2-5个相关关键词，用于向量搜索，优先提取名词和关键信息
 9. 如果不确定，confidence 设为较低值（0.3-0.5）
 10. 请直接输出 JSON，不要有任何额外文本。

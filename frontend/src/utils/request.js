@@ -2,10 +2,10 @@ import axios from 'axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
-// 请求实例
+// 请求实例（LLM 生成为长耗时请求，超时放宽到 5 分钟；流式走 fetch 不受此限制）
 const request = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 300000,
   headers: {
     'Content-Type': 'application/json'
   }

@@ -110,6 +110,21 @@ async function handleSessionClick(session) {
   })
 }
 
+// 会话重命名
+async function handleRenameSession(session, title) {
+  const ok = await chatStore.renameSession(session.session_id, title)
+  if (ok) message.success('已重命名')
+  else message.error('重命名失败')
+}
+
+// 会话删除
+async function handleDeleteSession(session) {
+  if (!window.confirm(`删除会话「${session.title}」？`)) return
+  const ok = await chatStore.removeSession(session.session_id)
+  if (ok) message.success('已删除')
+  else message.error('删除失败')
+}
+
 // 渲染加载状态
 function renderLoadingMessage() {
   return `
@@ -157,6 +172,8 @@ function isLoadingMessage(msg) {
             :session="session"
             :active="chatStore.currentSession?.session_id === session.session_id"
             @click="handleSessionClick(session)"
+            @rename="(title) => handleRenameSession(session, title)"
+            @remove="() => handleDeleteSession(session)"
           />
         </div>
       </div>

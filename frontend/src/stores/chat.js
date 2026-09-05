@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import request from '@/utils/request'
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+
 export const useChatStore = defineStore('chat', () => {
   const sessions = ref([])
   const currentSession = ref(null)
@@ -74,7 +76,54 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 发送消息
+  // SSE 流式调用：meta/delta/done/error 帧。返回是否收到过任何帧。
+  async function streamChat(payload, { onMeta, onDelta }) {
+    const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (!response.ok || !response.body) {
+      const err = new Error(`HTTP ${response.status}`)
+      err.status = response.status
+      err.received = false
+      throw err
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+    let received = false
+    let streamError = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      received = true
+      buffer += decoder.decode(value, { stream: true })
+      // SSE 帧以空行分隔
+      let sep
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, sep)
+        buffer = buffer.slice(sep + 2)
+        for (const line of frame.split('\n')) {
+          if (!line.startsWith('data: ')) continue
+          let data
+          try { data = JSON.parse(line.slice(6)) } catch { continue }
+          if (data.type === 'meta') onMeta && onMeta(data)
+          else if (data.type === 'delta') onDelta && onDelta(data.content || '')
+          else if (data.type === 'error') streamError = new Error(data.error || '生成失败')
+        }
+      }
+    }
+    if (streamError) {
+      streamError.received = received
+      throw streamError
+    }
+    return received
+  }
+
+  // 发送消息（默认 SSE 流式；网络级失败自动回退非流式接口）
   async function sendMessage(content, memoryContext = true, searchEnabled = true) {
     if (!currentSession.value) {
       await createSession()
@@ -93,7 +142,6 @@ export const useChatStore = defineStore('chat', () => {
         content,
         created_at: new Date().toISOString()
       }
-      console.log('[ChatStore] 发送用户消息:', userMsg)
       messages.value.push(userMsg)
 
       // 占位 AI 消息（空内容，loading 为 true）
@@ -106,47 +154,98 @@ export const useChatStore = defineStore('chat', () => {
       }
       messages.value.push(placeholderMsg)
 
-      const response = await request.post('/chat/messages', {
+      const payload = {
         session_id: currentSession.value.session_id,
         content,
         memory_context: memoryContext,
         search_enabled: searchEnabled
-      })
-
-      console.log('[ChatStore] 收到响应:', response)
-      console.log('[ChatStore] 响应类型:', typeof response)
-      console.log('[ChatStore] 响应 keys:', Object.keys(response || {}))
-
-      // 从响应中提取 AI 消息内容
-      const aiContent = response?.response || response?.data?.response || response?.data?.data?.response || ''
-      console.log('[ChatStore] AI 响应内容:', aiContent)
-
-      // 替换占位消息的内容
-      const idx = messages.value.findIndex(m => m.id === placeholderId)
-      if (idx !== -1) {
-        messages.value[idx].content = aiContent
-        messages.value[idx].created_at = new Date().toISOString()
-      } else {
-        // 若未找到占位，则直接添加
-        messages.value.push({
-          id: placeholderId,
-          role: 'assistant',
-          content: aiContent,
-          created_at: new Date().toISOString()
-        })
       }
 
-      error.value = null
-      return response
+      const patchPlaceholder = (fn) => {
+        const idx = messages.value.findIndex(m => m.id === placeholderId)
+        if (idx !== -1) fn(messages.value[idx])
+        return idx !== -1
+      }
+
+      try {
+        await streamChat(payload, {
+          onMeta: (meta) => {
+            patchPlaceholder(m => {
+              if (meta.memory_context) m.memory_context = meta.memory_context
+              if (meta.sources) m.sources = meta.sources
+            })
+          },
+          onDelta: (piece) => {
+            patchPlaceholder(m => {
+              m.content += piece
+              m.created_at = new Date().toISOString()
+            })
+          }
+        })
+        error.value = null
+        return
+      } catch (streamErr) {
+        // 首帧都没收到 → 视为环境不支持流式，回退非流式接口
+        if (!streamErr.received) {
+          console.warn('[ChatStore] SSE 不可用，回退非流式:', streamErr)
+          try {
+            const response = await request.post('/chat/messages', payload)
+            const aiContent = response?.data?.response ?? response?.response ?? ''
+            patchPlaceholder(m => {
+              m.content = aiContent
+              m.created_at = new Date().toISOString()
+            })
+            error.value = null
+            return response
+          } catch (fallbackErr) {
+            // 回退也失败：消息未入库，回滚乐观更新
+            messages.value = messages.value.filter(msg => msg.id < timestamp)
+            throw fallbackErr
+          }
+        }
+        // 流中断：用户消息已入库，保留消息并在占位处显示错误
+        patchPlaceholder(m => {
+          m.content = m.content || `⚠️ ${streamErr.message}`
+        })
+        throw streamErr
+      }
     } catch (err) {
-      // 移除乐观更新的消息（用户消息和占位 AI 消息）
-      // 移除本次发送的用户消息和占位 AI 消息
-      messages.value = messages.value.filter(msg => msg.id < timestamp)
       error.value = err.message || '发送消息失败'
       console.error('发送消息失败:', err)
       throw err
     } finally {
       loading.value = false
+    }
+  }
+
+  // 重命名会话
+  async function renameSession(sessionId, title) {
+    try {
+      await request.patch(`/chat/sessions/${sessionId}`, null, { params: { title } })
+      const s = sessions.value.find(x => x.session_id === String(sessionId))
+      if (s) s.title = title
+      return true
+    } catch (err) {
+      error.value = err.message || '重命名失败'
+      console.error('重命名会话失败:', err)
+      return false
+    }
+  }
+
+  // 删除会话
+  async function removeSession(sessionId) {
+    try {
+      await request.delete(`/chat/sessions/${sessionId}`)
+      sessions.value = sessions.value.filter(s => s.session_id !== String(sessionId))
+      if (currentSession.value && currentSession.value.session_id === String(sessionId)) {
+        currentSession.value = sessions.value[0] || null
+        messages.value = []
+      }
+      return true
+    } catch (err) {
+      error.value = err.message || '删除失败'
+      console.error('删除会话失败:', err)
+      return false
     }
   }
 
@@ -177,6 +276,9 @@ export const useChatStore = defineStore('chat', () => {
     switchSession,
     fetchMessages,
     sendMessage,
+    streamChat,
+    renameSession,
+    removeSession,
     clearMessages,
     clearSessions
   }

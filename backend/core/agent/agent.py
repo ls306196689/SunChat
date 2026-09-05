@@ -1,460 +1,138 @@
 """
 SunChat Backend - Agent Core
-Agent 核心逻辑，实现 ReAct 循环，指挥其他组件协同工作
+Ollama 原生 tool_calls 循环（替代伪 ReAct JSON 文本，修 A1/A3/A4/A7）。
+
+- 无状态：历史/消息由调用方传入，循环内 messages 为局部变量
+- role:"tool" 消息紧跟带 tool_calls 的 assistant 消息、带 name（Ollama 合法序）
+- 工具结果 content 一律 json.dumps(ensure_ascii=False)
+- 纯文本回退：模型不支持 tools / 不产 tool_calls / 解析失败 → 直接返回文本答案
+- max_iterations 兜底
 """
 import json
-import re
-from typing import List, Dict, Optional, Any, Generator
-from datetime import datetime
+from typing import List, Dict, Optional, Tuple
 
-from core.agent.schema import (
-    Message,
-    ToolResult,
-    ToolDefinition,
-    AgentState,
-    MemoryContext,
-    AgentConfig,
-    Action
-)
+from core.agent.schema import ToolResult
+from core.agent.tools import get_openai_tool_schemas, execute_tool
 from core.agent.llm import agent_llm
-from core.agent.tools import (
-    get_all_tools,
-    get_tool_definition,
-    register_builtin_tools,
-    ToolResult as ToolExecutionResult
-)
-from core.memory_router import memory_router
-from core.memory_extractor import memory_extractor
-from services.memory_service import memory_service
 from utils.logger import logger
 
 
-class Agent:
-    """
-    Agent 核心类 - 实现 ReAct 模式
+DEFAULT_SYSTEM_PROMPT = """你是 SunChat 个人助理 Agent，可以调用工具来完成任务。
 
-    ReAct 模式：Reasoning + Acting
-    - 思考 (Thought)：分析当前状态，决定下一步
-    - 行动 (Action)：调用工具
-    - 观察 (Observation)：获取工具执行结果
-    """
-
-    def __init__(self, config: AgentConfig = None):
-        self.config = config or AgentConfig.default()
-        self.conversation_history: List[Dict] = []
-        self.state = AgentState()
-        self._register_tools()
-
-    def _register_tools(self):
-        """注册工具"""
-        self.tools = {}
-        for tool_def in get_all_tools():
-            name = tool_def.get("name")
-            if name:
-                self.tools[name] = tool_def
-        logger.info(f"[AGENT] 注册工具 - {list(self.tools.keys())}")
-
-    def _build_system_prompt(self) -> str:
-        """构建系统提示"""
-        # 基础系统提示
-        system_prompt = """你是一个智能 Agent，需要使用 ReAct 模式解决用户问题。
-
-你的输出必须遵循以下格式（始终使用 JSON）：
-{
-    "thought": "你的思考过程，分析当前状态和下一步计划",
-    "action": {
-        "name": "工具名称",
-        "parameters": {
-            "参数名": "参数值"
-        }
-    },
-    "observation": "工具执行结果（如果是观察步骤）"
-}
-
-可用工具：
-"""
-
-        # 添加工具描述
-        for name, tool_def in self.tools.items():
-            desc = tool_def.get("description", "")
-            params = tool_def.get("parameters", {})
-            system_prompt += f"""
-{name}: {desc}
-参数: {json.dumps(params, ensure_ascii=False, indent=2)}
-"""
-
-        system_prompt += """
+可用能力：查询/保存用户记忆、联网搜索、检索知识库文档。
 规则：
-1. 每次思考后必须有一个行动，除非任务已完成
-2. 行动必须是预定义的工具之一
-3. 观察步骤用于返回工具执行结果
-4. 任务完成后输出: {"thought": "任务完成", "action": {"name": "finish", "result": "最终答案"}}
-5. 如果不需要工具，直接回答用户问题
-"""
+1. 需要用户个人信息时先查记忆，再回答；用户主动告知的重要信息要调用 memory_create 保存。
+2. 时效性问题（新闻/最新）用 web_search；上传文档内容用 knowledge_search。
+3. 能直接回答的问题不要调用工具。
+4. 中文回答，简洁准确；引用工具结果时说明依据。"""
 
-        return system_prompt
 
-    def _parse_agent_output(self, text: str) -> Dict:
-        """解析 Agent 输出"""
-        result = {
-            "thought": text,
-            "action": None,
-            "observation": None,
-            "raw": text
-        }
-
-        # 尝试解析 JSON
+def _normalize_arguments(raw) -> Dict:
+    """tool_calls.function.arguments 可能是 dict 或 JSON 字符串。"""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
         try:
-            # 移除可能的 Markdown 代码块
-            clean_text = text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-            clean_text = clean_text.strip()
-
-            # 尝试解析 JSON
-            parsed = json.loads(clean_text)
-
+            parsed = json.loads(raw)
             if isinstance(parsed, dict):
-                result["thought"] = parsed.get("thought", text)
-                result["action"] = parsed.get("action")
-                result["observation"] = parsed.get("observation")
+                return parsed
         except json.JSONDecodeError:
-            # 如果不是 JSON，提取可能的 JSON 部分
-            json_match = re.search(r'\{[\s\S]*\}', text)
-            if json_match:
+            pass
+    return {}
+
+
+class Agent:
+    """Agent：原生 tool_calls 多轮循环（无状态，可并发安全使用）。"""
+
+    def __init__(self, max_iterations: int = 5, system_prompt: str = None):
+        self.default_max_iterations = max_iterations
+        self.system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
+
+    def run(self, user_input: str, user_id: int = 1,
+            history: List[Dict] = None, model: str = None,
+            max_iterations: int = None) -> Dict:
+        """执行 Agent 循环。
+
+        Args:
+            user_input: 用户输入
+            user_id: 注入工具的用户身份（LLM 不可见不可改）
+            history: 可选多轮历史 [{"role","content"}]
+        Returns:
+            {"content": 最终答案, "tool_trace": [...], "iterations": n, "mode": "tools"|"text"}
+        """
+        max_iter = max_iterations or self.default_max_iterations
+        messages: List[Dict] = [{"role": "system", "content": self.system_prompt}]
+        for h in (history or []):
+            if h.get("role") in ("user", "assistant") and h.get("content"):
+                messages.append({"role": h["role"], "content": h["content"]})
+        messages.append({"role": "user", "content": user_input})
+
+        tool_trace: List[Dict] = []
+        schemas = get_openai_tool_schemas()
+
+        for i in range(max_iter):
+            try:
+                resp = agent_llm.generate(messages, tools=schemas, model=model)
+            except Exception as e:
+                logger.error(f"[AGENT] LLM 调用失败(轮{i + 1}): {e}")
+                # 纯文本回退：不带 tools 再试一轮
                 try:
-                    parsed = json.loads(json_match.group())
-                    if isinstance(parsed, dict):
-                        result["thought"] = parsed.get("thought", text)
-                        result["action"] = parsed.get("action")
-                        result["observation"] = parsed.get("observation")
-                except json.JSONDecodeError:
-                    pass
+                    resp = agent_llm.generate(messages, tools=None, model=model)
+                except Exception as e2:
+                    return {"content": "", "tool_trace": tool_trace,
+                            "iterations": i, "mode": "tools", "error": str(e2)}
+                return {"content": resp["message"].get("content", ""),
+                        "tool_trace": tool_trace, "iterations": i + 1,
+                        "mode": "text"}
 
-        return result
+            msg = resp.get("message", {}) or {}
+            calls = msg.get("tool_calls") or []
 
-    def _execute_action(self, action: Dict) -> ToolResult:
-        """执行动作"""
-        if not action:
-            return ToolResult(success=False, error="没有行动")
+            if not calls:
+                # 无工具调用 → 最终答案（含"模型不支持 tools 直接给文本"的回退）
+                return {"content": msg.get("content", ""),
+                        "tool_trace": tool_trace, "iterations": i + 1,
+                        "mode": "tools" if tool_trace else "text"}
 
-        name = action.get("name")
-        parameters = action.get("parameters", {})
+            # 追加 assistant（带 tool_calls）+ 每个 tool 结果（合法相邻顺序）
+            messages.append({"role": "assistant",
+                             "content": msg.get("content", ""),
+                             "tool_calls": calls})
+            for tc in calls:
+                fn = (tc.get("function") or {})
+                name = fn.get("name", "")
+                args = _normalize_arguments(fn.get("arguments"))
+                result: ToolResult = execute_tool(name, args, user_id=user_id)
+                payload = result.to_dict()
+                tool_trace.append({"tool": name, "arguments": args,
+                                   "success": result.success,
+                                   "summary": _summarize(payload)})
+                messages.append({
+                    "role": "tool",
+                    "content": json.dumps(payload, ensure_ascii=False, default=str),
+                    "name": name,
+                })
 
-        logger.info(f"[AGENT] 执行动作 - name:{name}, parameters:{parameters}")
+        logger.warning(f"[AGENT] 达到最大迭代 {max_iter}，强制终止")
+        return {"content": "（已达到最大工具调用轮次，以下是目前的结果）" +
+                "\n".join(t["summary"] for t in tool_trace if t["summary"]),
+                "tool_trace": tool_trace, "iterations": max_iter,
+                "mode": "tools"}
 
-        # 检查是否是 finish 动作
-        if name == "finish":
-            result = action.get("result", "任务完成")
-            return ToolResult(success=True, data=result, metadata={"action": "finish"})
-
-        # 执行工具
-        tool_def = self.tools.get(name)
-        if not tool_def:
-            return ToolResult(
-                success=False,
-                error=f"未知工具: {name}。可用工具: {list(self.tools.keys())}"
-            )
-
-        try:
-            # 执行工具函数
-            if "function" in tool_def:
-                # 装饰器注册的函数
-                tool_func = tool_def["function"]
-                result = tool_func(**parameters)
-                if isinstance(result, ToolExecutionResult):
-                    return ToolResult(
-                        success=result.success,
-                        data=result.data,
-                        error=result.error
-                    )
-                return ToolResult(success=True, data=result)
-            elif "tool" in tool_def:
-                # 类注册的工具
-                tool_instance = tool_def["tool"]
-                tool_result = tool_instance.run(**parameters)
-                return ToolResult(
-                    success=tool_result.success,
-                    data=tool_result.data,
-                    error=tool_result.error
-                )
-            else:
-                return ToolResult(
-                    success=False,
-                    error=f"工具 {name} 没有实现"
-                )
-        except Exception as e:
-            logger.error(f"[AGENT] 执行工具 {name} 失败 - 错误:{e}")
-            return ToolResult(success=False, error=str(e))
-
-    def _update_state(self, thought: str, action: Dict, observation: str):
-        """更新 Agent 状态"""
-        self.state.thoughts.append(thought)
-        if action:
-            self.state.current_action = action
-        if observation:
-            self.state.observation = observation
-
-    def _add_to_history(self, role: str, content: str):
-        """添加到对话历史"""
-        self.conversation_history.append({
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now().isoformat()
-        })
-
-        # 修剪对话历史
-        while len(self.conversation_history) > 10:
-            self.conversation_history.pop(0)
-
-    def process(
-        self,
-        user_input: str,
-        max_iterations: int = None,
-        user_id: int = 1
-    ) -> Dict:
-        """
-        处理用户输入 - ReAct 循环
-
-        Args:
-            user_input: 用户输入
-            max_iterations: 最大迭代次数
-            user_id: 用户 ID
-
-        Returns:
-            最终结果
-        """
-        max_iterations = max_iterations or self.config.max_iterations
-        self.state = AgentState()
-        self.conversation_history = []
-
-        logger.info(f"[AGENT] 开始处理 - 用户输入:{user_input[:100]}...")
-
-        # 添加用户输入到历史
-        self._add_to_history("user", user_input)
-
-        # 构建系统提示
-        system_prompt = self._build_system_prompt()
-
-        for iteration in range(max_iterations):
-            logger.info(f"[AGENT] 迭代 {iteration + 1}/{max_iterations}")
-
-            # 构建消息
-            messages = agent_llm.build_messages(
-                system_prompt=system_prompt,
-                conversation_history=self.conversation_history,
-                user_input=user_input,
-                tool_results=self.state.tool_results
-            )
-
-            # 获取工具定义
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_def.get("name"),
-                        "description": tool_def.get("description"),
-                        "parameters": tool_def.get("parameters", {})
-                    }
-                }
-                for tool_def in self.tools.values()
-            ]
-
-            # 调用 LLM
-            try:
-                response = agent_llm.generate(messages, tools if tools else None)
-                logger.debug(f"[AGENT] LLM 原始响应: {response}")
-
-                if response.get("error"):
-                    return {
-                        "success": False,
-                        "error": response.get("error"),
-                        "thoughts": self.state.thoughts
-                    }
-
-                content = response.get("message", {}).get("content", "")
-
-            except Exception as e:
-                logger.error(f"[AGENT] LLM 调用失败 - 错误:{e}")
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "thoughts": self.state.thoughts
-                }
-
-            # 解析响应
-            parsed = self._parse_agent_output(content)
-            logger.debug(f"[AGENT] 解析结果: {parsed}")
-
-            # 检查是否完成
-            if parsed["action"] and parsed["action"].get("name") == "finish":
-                self.state.final_result = parsed["action"].get("result", content)
-                self.state.current_step = "complete"
-                self._add_to_history("assistant", self.state.final_result)
-                break
-
-            # 执行动作
-            if parsed["action"]:
-                self.state.current_step = "act"
-                tool_result = self._execute_action(parsed["action"])
-                self.state.tool_results.append(tool_result)
-
-                observation = ""
-                if tool_result.success:
-                    observation = f"工具执行成功: {tool_result.data}"
-                else:
-                    observation = f"工具执行失败: {tool_result.error}"
-
-                self.state.observation = observation
-                logger.info(f"[AGENT] 观察: {observation[:100]}...")
-
-                # 添加到历史
-                self._add_to_history("assistant", parsed["thought"])
-                self._add_to_history("tool", observation)
-
-                self.state.current_step = "observe"
-            else:
-                # 没有动作，直接返回内容
-                self.state.final_result = content
-                self._add_to_history("assistant", content)
-                self.state.current_step = "complete"
-                break
-
-        logger.info(f"[AGENT] 处理完成 - 迭代次数:{iteration + 1}, 最终结果长度:{len(self.state.final_result or '')}")
-
-        return {
-            "success": True,
-            "result": self.state.final_result,
-            "thoughts": self.state.thoughts,
-            "tool_results": [r.to_dict() for r in self.state.tool_results],
-            "iterations": iteration + 1
-        }
-
-    def process_simple(self, user_input: str, user_id: int = 1) -> Dict:
-        """
-        简化处理流程 - 优化的对话流程
-
-        流程：
-        1. 用户输入信息
-        2. 构建 prompt + 用户输入信息 给 llm, 看需要查询什么记忆
-        3. 按照 llm 提示查询本地记忆
-        4. 本地记忆查询内容 + 用户输入信息 + 记忆提取 prompt 给到 llm
-        5. llm 返回记忆提取内容 以及 对用户输入信息的回复
-        6. 本地服务更新记忆, 如果有冲突以最新记忆为准
-
-        Args:
-            user_input: 用户输入
-            user_id: 用户 ID
-
-        Returns:
-            响应结果
-        """
-        logger.info(f"[AGENT] 简化处理开始 - 用户输入:{user_input[:100]}...")
-
-        # Step 1: 用户输入信息
-        self._add_to_history("user", user_input)
-
-        # Step 2: 构建 prompt + 用户输入信息 给 llm, 看需要查询什么记忆
-        logger.info("[AGENT] Step 2: 分析需要查询的记忆类型")
-        analysis_result = memory_router.analyze_memory_need(user_input)
-        logger.info(f"[AGENT]   记忆分析完成 - 类型:{analysis_result.get('recommended_memory_types', [])}")
-
-        # Step 3: 按照 llm 提示查询本地记忆
-        memory_context = []
-        if analysis_result.get("needs_memory_query", False):
-            logger.info("[AGENT] Step 3: 查询本地记忆")
-            try:
-                memory_context = memory_service.search_memories_by_analysis(
-                    user_id=user_id,
-                    analysis_result=analysis_result,
-                    top_k=5
-                )
-                logger.info(f"[AGENT]   查询到 {len(memory_context)} 条相关记忆")
-            except Exception as e:
-                logger.error(f"[AGENT]   查询记忆失败 - 错误:{e}")
-
-        # Step 4: 本地记忆查询内容 + 用户输入信息 + 记忆提取 prompt 给到 llm
-        logger.info("[AGENT] Step 4: 构建 prompt 并调用 LLM")
-
-        # 构建系统提示
-        system_prompt = "你是一个智能助手。请回答用户问题。"
-
-        # 添加记忆上下文
-        if memory_context:
-            memory_text = "\n".join([f"- {m['content']} (相似度: {m['similarity']:.2f})" for m in memory_context])
-            system_prompt += f"\n\n用户背景信息（基于语义检索的记忆）：\n{memory_text}"
-
-        # 构建完整 prompt
-        full_prompt = f"{system_prompt}\n\n用户: {user_input}\n\nAI:"
-
-        # Step 5: LLM 返回记忆提取内容以及对用户输入信息的回复
-        try:
-            logger.info("[AGENT] Step 5: LLM 生成响应")
-            response_content = agent_llm.generate(
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": full_prompt}
-                ]
-            )
-
-            content = response_content.get("message", {}).get("content", "")
-            logger.debug(f"[AGENT]   LLM 响应长度:{len(content)}")
-
-        except Exception as e:
-            logger.error(f"[AGENT]   LLM 调用失败 - 错误:{e}")
-            content = "抱歉，我遇到了一些问题。请稍后重试。"
-
-        # Step 6: 本地服务更新记忆
-        memory_updates = []
-        if memory_context:
-            try:
-                logger.info("[AGENT] Step 6: 更新记忆")
-                extraction_result = memory_extractor.extract_memories(
-                    user_input=user_input,
-                    ai_response=content,
-                    context_memories=memory_context
-                )
-
-                logger.info(f"[AGENT]   提取到 {extraction_result.get('extracted_count', 0)} 条新记忆")
-
-                for mem_data in extraction_result.get("memories", []):
-                    try:
-                        result = memory_service.update_or_create_memory(
-                            user_id=user_id,
-                            content=mem_data.get("content", ""),
-                            memory_type=mem_data.get("type", "semantic"),
-                            category=mem_data.get("category", "general"),
-                            importance=mem_data.get("importance", 5)
-                        )
-                        mem_data["action"] = result.get("action", "created")
-                        memory_updates.append(mem_data)
-                    except Exception as e:
-                        logger.error(f"[AGENT]   更新记忆失败 - 错误:{e}")
-
-            except Exception as e:
-                logger.error(f"[AGENT]   记忆更新失败 - 错误:{e}")
-
-        # 添加到历史
-        self._add_to_history("assistant", content)
-
-        return {
-            "success": True,
-            "result": content,
-            "memory_updates": memory_updates,
-            "memory_context": memory_context,
-            "analysis_result": analysis_result
-        }
-
-    def reset(self):
-        """重置 Agent"""
-        self.conversation_history = []
-        self.state = AgentState()
-        logger.info("[AGENT] Agent 已重置")
+    def run_simple(self, user_input: str, user_id: int = 1,
+                   model: str = None) -> Dict:
+        """纯文本单轮（无工具）：用于能力探测失败时的降级路径。"""
+        return self.run(user_input, user_id=user_id, model=model,
+                        max_iterations=1)
 
 
-# 全局实例
+def _summarize(payload: Dict, limit: int = 120) -> str:
+    try:
+        text = json.dumps(payload, ensure_ascii=False, default=str)
+    except Exception:
+        text = str(payload)
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+# 全局无状态实例
 agent = Agent()

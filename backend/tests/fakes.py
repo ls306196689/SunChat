@@ -19,12 +19,15 @@ FAKE_CHAT_MODELS = [{"name": "qwen2.5:7b"}, {"name": "nomic-embed-text"}]
 # 调用计数与最近 payload 捕获（供测试断言 0 LLM / system 单份 / 多轮历史）
 CALLS = {"chat": 0, "embed": 0}
 LAST_CHAT_PAYLOADS: List[Dict] = []
+# 脚本化 /api/chat 响应队列（Agent tool_calls 场景）：[{"message": {...}}]
+SCRIPTED_CHAT: List[Dict] = []
 
 
 def reset_calls():
     CALLS["chat"] = 0
     CALLS["embed"] = 0
     LAST_CHAT_PAYLOADS.clear()
+    SCRIPTED_CHAT.clear()
 FAKE_SEARCH_RESULTS = [
     {"title": "Python 语言介绍", "href": "http://example.com/py", "url": "http://example.com/py",
      "body": "Python 是一种解释型编程语言。", "snippet": "Python 是一种解释型编程语言。"},
@@ -127,6 +130,14 @@ def dispatch(url: str, payload: Dict, stream: bool = False) -> FakeResponse:
     if url.endswith("/api/chat"):
         CALLS["chat"] += 1
         LAST_CHAT_PAYLOADS.append(payload)
+        if SCRIPTED_CHAT and payload.get("tools"):
+            # 脚本化 Agent 响应（tool_calls 等）；仅带 tools 的请求从队列消费，
+            # 普通对话（无 tools）不受影响
+            scripted = SCRIPTED_CHAT.pop(0)
+            reply_payload = dict(scripted)
+            reply_payload.setdefault("done", False)
+            reply_payload.setdefault("eval_count", 8)
+            return FakeResponse(reply_payload)
         reply = fake_chat_reply(payload)
         if stream:
             lines = []
@@ -171,11 +182,17 @@ def install():
 
     patchers = []
     fake_session = FakeSession()
-    for mod, name, target in (
+    patch_targets = [
         (llm_mod, "_http", fake_session),
         (embed_mod, "_http", fake_session),
         (mm_mod, "requests", FakeRequests),
-    ):
+    ]
+    try:
+        import core.agent.llm as agent_llm_mod
+        patch_targets.append((agent_llm_mod, "_http", fake_session))
+    except ImportError:
+        pass
+    for mod, name, target in patch_targets:
         p = mock.patch.object(mod, name, target)
         p.start()
         patchers.append(p)

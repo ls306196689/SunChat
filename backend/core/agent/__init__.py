@@ -13,13 +13,12 @@ from core.agent.schema import (
 from core.agent.llm import agent_llm
 from core.agent.tools import (
     tool,
-    Tool,
-    ToolResult as ToolExecutionResult,
     get_tool,
-    get_tool_definition,
-    get_all_tools
+    get_all_tool_definitions,
+    get_openai_tool_schemas,
+    execute_tool,
 )
-from core.agent.agent import Agent, agent
+from core.agent.agent import Agent
 
 __all__ = [
     # Schema
@@ -34,11 +33,10 @@ __all__ = [
     "agent_llm",
     # Tools
     "tool",
-    "Tool",
-    "ToolExecutionResult",
     "get_tool",
-    "get_tool_definition",
-    "get_all_tools",
+    "get_all_tool_definitions",
+    "get_openai_tool_schemas",
+    "execute_tool",
     # Agent
     "Agent",
     "agent",

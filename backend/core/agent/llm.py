@@ -1,23 +1,20 @@
 """
 SunChat Backend - Agent LLM Interface
-与大语言模型通信的接口，负责格式化请求和解析响应
+Ollama 原生 function-calling 客户端（复用 core.llm 统一 HTTP 会话，修 A2/A3/A4）。
 """
 import json
-import re
-import requests
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 
-from core.llm import ollama_service
+from core.llm import _http
 from core.model_manager import model_manager
 from app.config import settings
 from utils.logger import logger
 
 
 class AgentLLM:
-    """Agent LLM 通信接口（模型动态解析，URL 来自配置）"""
+    """Agent LLM 通信接口（模型动态解析；透传 tools/tool_calls）"""
 
     def __init__(self, model: str = None, temperature: float = 0.7):
-        # 显式指定的模型（可选），否则每次动态解析
         self._fixed_model = model
         self.temperature = temperature
 
@@ -26,143 +23,48 @@ class AgentLLM:
             return self._fixed_model
         return model_manager.resolve_chat_model()
 
-    def generate(self, messages: List[Dict], tools: List[Dict] = None, stream: bool = False) -> Dict:
+    def generate(self, messages: List[Dict], tools: List[Dict] = None,
+                 stream: bool = False, model: Optional[str] = None) -> Dict:
+        """调用 /api/chat，返回 {message: {role, content[, tool_calls]}, ...}。
+
+        tool_calls 原样透传（Ollama 已兼容 OpenAI 格式），失败抛异常。
         """
-        生成文本（支持工具调用）
-
-        Args:
-            messages: 消息列表，格式 [{"role": "user", "content": "..."}]
-            tools: 工具定义列表
-            stream: 是否流式返回
-
-        Returns:
-            LLM 响应
-        """
-        try:
-            resolved_model = self._resolve_model()
-            url = f"{settings.LLM_API_URL.rstrip('/')}/api/chat"
-            payload = {
-                "model": resolved_model,
-                "messages": messages,
-                "temperature": self.temperature,
-                "stream": stream
-            }
-
-            if tools:
-                payload["tools"] = tools
-
-            # 调用 Ollama 服务
-            response = requests.post(url, json=payload)
-            response.raise_for_status()
-            result = response.json()
-
-            return {
-                "message": {
-                    "content": result.get("message", {}).get("content", ""),
-                    "role": result.get("message", {}).get("role", "assistant")
-                },
-                "model": result.get("model", resolved_model),
-                "done": result.get("done", True)
-            }
-
-        except Exception as e:
-            logger.error(f"[AGENT_LLM] LLM 调用失败 - 错误:{e}")
-            return {
-                "error": str(e),
-                "content": "LLM 调用失败，请稍后重试"
-            }
-
-    def parse_thought_action(self, text: str) -> Dict:
-        """
-        解析 Agent 的 Thought-Action 输出
-
-        Args:
-            text: LLM 原始输出
-
-        Returns:
-            解析后的 thought 和 action
-        """
-        result = {
-            "thought": text,
-            "action": None,
-            "observation": None,
-            "raw": text
+        url = f"{settings.LLM_API_URL.rstrip('/')}/api/chat"
+        payload = {
+            "model": model or self._resolve_model(),
+            "messages": messages,
+            "temperature": self.temperature,
+            "stream": stream,
         }
+        if tools:
+            payload["tools"] = tools
 
-        # 尝试解析 JSON
-        try:
-            # 移除可能的 Markdown 代码块
-            clean_text = text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-            clean_text = clean_text.strip()
+        resp = _http.post(url, json=payload, timeout=settings.LLM_TIMEOUT)
+        resp.raise_for_status()
+        result = resp.json()
+        msg = result.get("message", {}) or {}
+        out = {
+            "message": {
+                "role": msg.get("role", "assistant"),
+                "content": msg.get("content", ""),
+            },
+            "model": result.get("model", payload["model"]),
+        }
+        if msg.get("tool_calls"):
+            out["message"]["tool_calls"] = msg["tool_calls"]
+        return out
 
-            # 尝试解析 JSON
-            parsed = json.loads(clean_text)
+    def supports_tools(self) -> bool:
+        """能力探测（启发式）：模型名命中已知支持 tool calling 的系列才走工具循环。
 
-            if isinstance(parsed, dict):
-                result["thought"] = parsed.get("thought", text)
-                result["action"] = parsed.get("action")
-                result["observation"] = parsed.get("observation")
-        except json.JSONDecodeError:
-            # 如果不是 JSON，提取可能的 JSON 部分
-            json_match = re.search(r'\{[\s\S]*\}', text)
-            if json_match:
-                try:
-                    parsed = json.loads(json_match.group())
-                    if isinstance(parsed, dict):
-                        result["thought"] = parsed.get("thought", text)
-                        result["action"] = parsed.get("action")
-                        result["observation"] = parsed.get("observation")
-                except json.JSONDecodeError:
-                    pass
-
-        return result
-
-    def build_messages(
-        self,
-        system_prompt: str,
-        conversation_history: List[Dict],
-        user_input: str,
-        tool_results: List[Dict] = None
-    ) -> List[Dict]:
+        未知模型按"不确定"处理由上层降级；Ollama 对不支持 tools 的模型会直接忽略
+        tools 字段返回纯文本，因此上层同时具备纯文本回退路径。
         """
-        构建消息列表
-
-        Args:
-            system_prompt: 系统提示
-            conversation_history: 对话历史
-            user_input: 用户输入
-            tool_results: 工具结果
-
-        Returns:
-            消息列表
-        """
-        messages = []
-
-        # 添加系统提示
-        messages.append({"role": "system", "content": system_prompt})
-
-        # 添加对话历史
-        messages.extend(conversation_history)
-
-        # 添加工具结果（如果有）
-        if tool_results:
-            for tool_result in tool_results:
-                messages.append({
-                    "role": "tool",
-                    "content": json.dumps(tool_result, ensure_ascii=False),
-                    "name": tool_result.get("tool_name", "tool")
-                })
-
-        # 添加用户输入
-        messages.append({"role": "user", "content": user_input})
-
-        return messages
+        name = self._resolve_model().lower()
+        known = ["qwen2.5", "qwen3", "qwen3.5", "qwen3.8", "llama3.1", "llama3.2",
+                 "llama3.3", "glm4", "mistral", "mistral-nemo", "command-r",
+                 "deepseek-r1", "gemma3", "firefunction"]
+        return any(k in name for k in known)
 
 
 # 全局实例

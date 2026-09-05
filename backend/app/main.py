@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings, DATA_DIR, UPLOAD_DIR
-from app.api.v1.routes import auth, chat, memories, search, knowledge, health, models
+from app.api.v1.routes import auth, chat, memories, search, knowledge, health, models, agent
 
 
 @asynccontextmanager
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(memories.router, prefix="/api/v1", tags=["memories"])
     app.include_router(search.router, prefix="/api/v1", tags=["search"])
     app.include_router(knowledge.router, prefix="/api/v1", tags=["knowledge"])
+    app.include_router(agent.router, prefix="/api/v1", tags=["agent"])
 
     return app
 

@@ -1,326 +1,166 @@
 """
 SunChat Backend - Agent Tools
-提供 Agent 可以调用的具体能力
+提供 Agent 可调用的工具：OpenAI/Ollama 原生 function-calling Schema + 真实执行。
+
+约定：
+- user_id 由 Agent 循环注入，不作为 LLM 可见参数（防越权，修 A6）
+- 工具返回 schema.ToolResult（单一来源，修 A8 重名问题）
 """
 import json
-import re
 from typing import List, Dict, Any, Optional, Callable
 from functools import wraps
-from dataclasses import dataclass
 
-from core.memory_router import memory_router
-from core.memory_extractor import memory_extractor
+from core.agent.schema import ToolResult, ToolDefinition
 from services.memory_service import memory_service
-from services.chat_service import chat_service
 from core.search import search_service
+from app.config import settings
 from utils.logger import logger
 
 
-# 工具注册表
-_registered_tools: Dict[str, 'Tool'] = {}
+# 工具注册表：name -> ToolDefinition
+_registered: Dict[str, ToolDefinition] = {}
 
 
-@dataclass
-class ToolResult:
-    """工具执行结果"""
-    success: bool
-    data: Any = None
-    error: Optional[str] = None
-    metadata: Dict = None
+def tool(name: str, description: str, parameters: Dict[str, Any]):
+    """注册工具装饰器：parameters 为 JSON Schema（type/properties/required）。
 
-    def to_dict(self) -> Dict:
-        result = {"success": self.success}
-        if self.data is not None:
-            result["data"] = self.data
-        if self.error:
-            result["error"] = self.error
-        if self.metadata:
-            result["metadata"] = self.metadata
-        return result
-
-
-class Tool:
-    """工具基类"""
-
-    name: str = ""
-    description: str = ""
-    parameters: Dict[str, Any] = {}
-
-    def __init__(self):
-        self.name = getattr(self, 'name', self.__class__.__name__.lower())
-        self.description = getattr(self, 'description', self.__doc__ or "")
-
-    def run(self, **kwargs) -> ToolResult:
-        """执行工具"""
-        raise NotImplementedError
-
-    def to_definition(self) -> Dict:
-        """转换为工具定义"""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": self.parameters
-        }
-
-
-# 装饰器模式
-def tool(name: str = None, description: str = None):
-    """
-    工具装饰器 - 零样板代码定义工具
-
-    Args:
-        name: 工具名称（默认为函数名）
-        description: 工具描述（默认为函数 docstring）
-
-    Returns:
-        包装函数
+    被装饰函数须返回可 JSON 序列化对象；异常自动包装为失败 ToolResult。
     """
     def decorator(func: Callable) -> Callable:
-        func_name = name or func.__name__
-        func_description = description or func.__doc__ or ""
-
-        # 提取参数信息
-        import inspect
-        sig = inspect.signature(func)
-        parameters = {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-
-        for param_name, param in sig.parameters.items():
-            if param_name == 'self':
-                continue
-
-            # 获取参数类型
-            param_type = "string"
-            if param.annotation != inspect.Parameter.empty:
-                if param.annotation == str:
-                    param_type = "string"
-                elif param.annotation == int:
-                    param_type = "integer"
-                elif param.annotation == float:
-                    param_type = "number"
-                elif param.annotation == bool:
-                    param_type = "boolean"
-                elif param.annotation == list:
-                    param_type = "array"
-                elif param.annotation == dict:
-                    param_type = "object"
-
-            parameters["properties"][param_name] = {"type": param_type}
-
-            if param.default == inspect.Parameter.empty:
-                parameters["required"].append(param_name)
-
-        # 创建工具定义
-        tool_def = {
-            "name": func_name,
-            "description": func_description,
-            "parameters": parameters,
-            "function": func
-        }
-
-        # 存储工具定义
-        func._tool_definition = tool_def
-
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def runner(**kwargs):
             try:
-                result = func(*args, **kwargs)
-                return ToolResult(success=True, data=result)
+                data = func(**kwargs)
+                return ToolResult(success=True, data=data)
             except Exception as e:
-                logger.error(f"[TOOL] {func_name} 执行失败 - 错误:{e}")
+                logger.error(f"[TOOL] {name} 执行失败 - 错误:{e}")
                 return ToolResult(success=False, error=str(e))
 
-        # 注册工具
-        _registered_tools[func_name] = tool_def
-
-        return wrapper
-
+        _registered[name] = ToolDefinition(
+            name=name, description=description,
+            parameters=parameters, function=runner)
+        return runner
     return decorator
 
 
-# 预定义工具
-
-class ChatTool(Tool):
-    """通用对话工具"""
-
-    name = "chat"
-    description = "进行通用对话，回答用户问题"
-
-    def run(self, message: str, memory_enabled: bool = True) -> ToolResult:
-        """执行对话"""
-        try:
-            # 简单的对话，直接返回提示
-            return ToolResult(
-                success=True,
-                data="这是一个通用对话工具，实际对话由主 Agent 处理。",
-                metadata={"memory_enabled": memory_enabled}
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+def _clean(kwargs: Dict[str, Any], allowed: List[str]) -> Dict[str, Any]:
+    """只保留 Schema 声明的参数，防止 LLM 注入多余字段。"""
+    return {k: v for k, v in kwargs.items() if k in allowed}
 
 
-class MemorySearchTool(Tool):
-    """记忆搜索工具"""
+# ==================== 工具实现 ====================
 
-    name = "memory_search"
-    description = "搜索用户的长期记忆，根据用户输入查询相关记忆"
-
-    def run(self, query: str, top_k: int = 5, user_id: int = 1) -> ToolResult:
-        """搜索记忆"""
-        try:
-            logger.info(f"[TOOL] memory_search - 查询:{query}, top_k:{top_k}")
-
-            # 使用 MemoryRouter 分析查询
-            analysis_result = memory_router.analyze_memory_need(query)
-
-            # 查询记忆
-            results = memory_service.search_memories_by_analysis(
-                user_id=user_id,
-                analysis_result=analysis_result,
-                top_k=top_k
-            )
-
-            return ToolResult(
-                success=True,
-                data={
-                    "memories": results,
-                    "analysis": analysis_result
-                },
-                metadata={"query": query, "top_k": top_k}
-            )
-        except Exception as e:
-            logger.error(f"[TOOL] memory_search 失败 - 错误:{e}")
-            return ToolResult(success=False, error=str(e))
+@tool(
+    name="memory_search",
+    description="搜索用户的长期记忆/偏好/经历。当回答需要用户的个人信息时使用。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "检索关键词或自然语言查询"},
+            "top_k": {"type": "integer", "description": "返回条数，默认 5"},
+        },
+        "required": ["query"],
+    },
+)
+def memory_search(query: str, top_k: int = 5, user_id: int = None):
+    return memory_service.search_memories(
+        user_id=user_id or settings.LOCAL_USER_ID, query=query,
+        top_k=int(top_k) if top_k else 5)
 
 
-class MemoryCreateTool(Tool):
-    """记忆创建工具"""
-
-    name = "memory_create"
-    description = "创建新记忆，当用户提供了重要信息时使用"
-
-    def run(
-        self,
-        content: str,
-        memory_type: str = "semantic",
-        category: str = "general",
-        importance: int = 5,
-        user_id: int = 1
-    ) -> ToolResult:
-        """创建记忆"""
-        try:
-            logger.info(f"[TOOL] memory_create - 内容:{content[:50]}..., category:{category}")
-
-            # 创建记忆
-            result = memory_service.create_memory(
-                user_id=user_id,
-                content=content,
-                memory_type=memory_type,
-                category=category,
-                importance=importance
-            )
-
-            return ToolResult(
-                success=True,
-                data=result,
-                metadata={"content": content}
-            )
-        except Exception as e:
-            logger.error(f"[TOOL] memory_create 失败 - 错误:{e}")
-            return ToolResult(success=False, error=str(e))
+@tool(
+    name="memory_create",
+    description="为用户创建一条新记忆（用户告知的名字/偏好/事实/事件时使用）。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "content": {"type": "string", "description": "完整明确的记忆陈述，如：用户叫小明"},
+            "category": {"type": "string",
+                         "description": "preference/person/event/knowledge/relationship/habit/general"},
+            "importance": {"type": "integer", "description": "1-10，名字等关键信息为 10"},
+        },
+        "required": ["content"],
+    },
+)
+def memory_create(content: str, category: str = "general",
+                  importance: int = 5, user_id: int = None):
+    return memory_service.create_memory(
+        user_id=user_id or settings.LOCAL_USER_ID, content=content,
+        memory_type="semantic", category=category or "general",
+        importance=int(importance) if importance else 5)
 
 
-class SearchTool(Tool):
-    """网络搜索工具"""
-
-    name = "search"
-    description = "搜索网络获取最新信息"
-
-    def run(self, query: str) -> ToolResult:
-        """搜索网络"""
-        try:
-            logger.info(f"[TOOL] search - 查询:{query}")
-
-            # 调用搜索服务
-            result = search_service.route_query(query)
-
-            return ToolResult(
-                success=True,
-                data=result,
-                metadata={"query": query}
-            )
-        except Exception as e:
-            logger.error(f"[TOOL] search 失败 - 错误:{e}")
-            return ToolResult(success=False, error=str(e))
+@tool(
+    name="web_search",
+    description="联网搜索获取实时/最新信息（新闻、行情、时效性内容）。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "搜索关键词"},
+            "max_results": {"type": "integer", "description": "结果条数，默认 5"},
+        },
+        "required": ["query"],
+    },
+)
+def web_search(query: str, max_results: int = 5):
+    return search_service.search(query, max_results=int(max_results) or 5)
 
 
-class KnowledgeSearchTool(Tool):
-    """知识库搜索工具"""
-
-    name = "knowledge_search"
-    description = "从知识库中检索信息"
-
-    def run(self, query: str) -> ToolResult:
-        """搜索知识库"""
-        try:
-            logger.info(f"[TOOL] knowledge_search - 查询:{query}")
-
-            # 调用知识库搜索
-            from services.knowledge_service import knowledge_service
-            results = knowledge_service.search(query)
-
-            return ToolResult(
-                success=True,
-                data=results,
-                metadata={"query": query}
-            )
-        except Exception as e:
-            logger.error(f"[TOOL] knowledge_search 失败 - 错误:{e}")
-            return ToolResult(success=False, error=str(e))
+@tool(
+    name="knowledge_search",
+    description="从用户上传的知识库文档中检索相关内容。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "检索问题"},
+            "top_k": {"type": "integer", "description": "返回条数，默认 5"},
+        },
+        "required": ["query"],
+    },
+)
+def knowledge_search(query: str, top_k: int = 5, user_id: int = None):
+    from services.knowledge_service import knowledge_service
+    return knowledge_service.search_knowledge(
+        user_id=user_id or settings.LOCAL_USER_ID, query=query,
+        top_k=int(top_k) if top_k else 5)
 
 
-# 工具注册函数
-def register_builtin_tools():
-    """注册内置工具"""
-    tools = [
-        ChatTool(),
-        MemorySearchTool(),
-        MemoryCreateTool(),
-        SearchTool(),
-        KnowledgeSearchTool()
-    ]
+# ==================== 注册表访问 ====================
 
-    for tool in tools:
-        _registered_tools[tool.name] = {
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": tool.parameters,
-            "tool": tool
-        }
-
-    return _registered_tools
+def get_tool(name: str) -> Optional[ToolDefinition]:
+    return _registered.get(name)
 
 
-def get_tool(name: str) -> Optional[Tool]:
-    """获取工具"""
-    tool_def = _registered_tools.get(name)
-    if tool_def and "tool" in tool_def:
-        return tool_def["tool"]
-    return None
+def get_all_tool_definitions() -> List[ToolDefinition]:
+    return list(_registered.values())
 
 
-def get_tool_definition(name: str) -> Optional[Dict]:
-    """获取工具定义"""
-    return _registered_tools.get(name)
+def get_openai_tool_schemas() -> List[Dict]:
+    """OpenAI/Ollama 原生 tools 参数格式。"""
+    return [td.to_openai_format() for td in _registered.values()]
 
 
-def get_all_tools() -> List[Dict]:
-    """获取所有工具定义"""
-    return list(_registered_tools.values())
+def execute_tool(name: str, arguments: Dict[str, Any],
+                 user_id: int = None) -> ToolResult:
+    """按名称执行工具；user_id 强制注入且 LLM 无法覆盖。"""
+    td = _registered.get(name)
+    if not td:
+        return ToolResult(success=False, error=f"未知工具: {name}")
 
+    args = dict(arguments or {})
+    args.pop("user_id", None)  # 防 LLM 伪造 user_id
+    args["user_id"] = user_id or settings.LOCAL_USER_ID
 
-# 注册内置工具
-register_builtin_tools()
+    allowed = set((td.parameters or {}).get("properties", {}).keys()) | {"user_id"}
+    args = {k: v for k, v in args.items() if k in allowed}
+
+    # 类型宽松转换：Ollama 部分版本把数字传成字符串
+    props = (td.parameters or {}).get("properties", {})
+    for key, spec in props.items():
+        if key in args and spec.get("type") == "integer":
+            try:
+                args[key] = int(args[key])
+            except (TypeError, ValueError):
+                pass
+
+    return td.function(**args)

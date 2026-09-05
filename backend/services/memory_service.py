@@ -471,17 +471,15 @@ class MemoryService(DBSessionMixin):
 
         logger.info(f"[MEMORY] 根据分析结果查询记忆 - 用户:{user_id}, 关键词:{query_keywords}, 类型:{memory_types}")
 
-        # 构建过滤条件
-        filters = {}
-        if memory_types and "general" not in memory_types:
-            filters["category"] = memory_types[0]  # 使用第一个推荐的类型作为分类
-
-        # 执行搜索
+        # 注意：不用 recommended_memory_types 做 category 过滤——
+        # 提取侧落库的 category（general/preference/...）与路由推荐类型（person/event/...）
+        # 是两套分类法，硬过滤会把正确结果清零（如"我叫什么"推荐 person，
+        # 但记忆存的是 general）。召回交给向量相似度 + 用户隔离。
         results = self.search_memories(
             user_id=user_id,
             query=query_text,
             top_k=top_k,
-            filters=filters
+            filters=None
         )
 
         logger.info(f"[MEMORY] 根据分析结果查询完成 - 结果数:{len(results)}")

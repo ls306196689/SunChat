@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict
 
+from app.config import settings
+from core.security import sanitize_input
 from services.search_service import search_svc
 from services.memory_service import memory_service
 
@@ -29,11 +31,15 @@ class SearchResponse(BaseModel):
 def perform_search(request: SearchRequest):
     """执行搜索"""
     try:
+        ok, reason = sanitize_input(request.query)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+
         # 检索记忆
         memories = []
         if request.use_memory_context:
             memories = memory_service.search_memories(
-                user_id=1,
+                user_id=settings.LOCAL_USER_ID,
                 query=request.query,
                 top_k=3
             )
@@ -51,7 +57,7 @@ def perform_search(request: SearchRequest):
         from models.sql_models import get_thread_session, SearchHistory
         db = get_thread_session()
         search_history = SearchHistory(
-            user_id=1,
+            user_id=settings.LOCAL_USER_ID,
             query=request.query,
             intent=route_result["intent"],
             results_count=len(results)
@@ -70,6 +76,8 @@ def perform_search(request: SearchRequest):
                 "used_memory": memories
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

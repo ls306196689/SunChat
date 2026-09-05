@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 
 from app.config import settings
+from core.security import sanitize_input
 from services.memory_service import memory_service
 
 router = APIRouter()
@@ -46,6 +47,8 @@ def list_memories(
             "message": "success",
             "data": result
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -54,6 +57,10 @@ def list_memories(
 def search_memories(request: MemorySearchRequest):
     """搜索记忆"""
     try:
+        ok, reason = sanitize_input(request.query)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+
         result = memory_service.search_memories(
             user_id=settings.LOCAL_USER_ID,
             query=request.query,
@@ -68,6 +75,8 @@ def search_memories(request: MemorySearchRequest):
                 "results": result
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -76,6 +85,10 @@ def search_memories(request: MemorySearchRequest):
 def create_memory(request: MemoryCreateRequest):
     """创建记忆"""
     try:
+        ok, reason = sanitize_input(request.content)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+
         memory = memory_service.create_memory(
             user_id=settings.LOCAL_USER_ID,
             content=request.content,
@@ -89,6 +102,8 @@ def create_memory(request: MemoryCreateRequest):
             "message": "记忆创建成功",
             "data": memory
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -142,5 +157,7 @@ def get_memory_stats():
             "message": "success",
             "data": stats
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

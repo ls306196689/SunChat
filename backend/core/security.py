@@ -16,11 +16,11 @@ INJECTION_PATTERNS = [
 ]
 
 # 敏感词列表（可扩展）
+# 注意：仅保留"词本身即高危"的词。裸 "key"/"token"/"secret" 会误杀正常技术提问
+# （如"如何轮换 API token"），且对话文本不含真实凭据，拦截无收益。
+# 日志落盘前的脱敏统一走 mask_sensitive_data（email/手机号/身份证号）。
 SENSITIVE_WORDS = [
     "password",
-    "secret",
-    "key",
-    "token",
 ]
 
 

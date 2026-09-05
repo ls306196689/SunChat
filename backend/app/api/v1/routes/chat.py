@@ -17,6 +17,7 @@ import json
 import asyncio
 
 from app.config import settings
+from core.security import sanitize_input
 from services.chat_service import chat_service
 from services.memory_service import memory_service
 
@@ -53,6 +54,10 @@ def create_message(request: ChatRequest):
     6. 本地服务更新记忆,如果有冲突以最新记忆为准
     """
     try:
+        ok, reason = sanitize_input(request.content)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+
         # 用户ID固定为本地单用户（诚实模式，见 /whoami）
         user_id = settings.LOCAL_USER_ID
 
@@ -82,6 +87,8 @@ def create_message(request: ChatRequest):
     except RuntimeError as e:
         # LLM 不可用/空响应：明确 503，且不落空 assistant 消息
         raise HTTPException(status_code=503, detail=f"LLM 服务暂不可用: {e}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -194,6 +201,10 @@ def stream_chat(request: StreamChatRequest):
     同步 generator：Starlette 自动放线程池执行，不阻塞事件循环。
     帧协议: {"type":"meta"|"delta"|"done"|"error", ...}
     """
+    ok, reason = sanitize_input(request.content)
+    if not ok:
+        raise HTTPException(status_code=400, detail=reason)
+
     user_id = settings.LOCAL_USER_ID
     try:
         session_id = int(request.session_id) if request.session_id.isdigit() else 1

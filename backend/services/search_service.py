@@ -43,6 +43,14 @@ class SearchService:
         Returns:
             包含 answer 和 sources 的结构化响应
         """
+        # 股价类问题：DDG 摘要拿不到实时价格，先直查行情 API 把具体数字喂给 LLM
+        stock_context = None
+        try:
+            from core.stock import get_stock_context
+            stock_context = get_stock_context(query)
+        except Exception as e:
+            logger.debug(f"[SEARCH] 行情直查跳过: {e}")
+
         # 路由查询并获取意图
         route_result = self.route_query(query, memories)
         intent = route_result.get("intent", "general")
@@ -51,30 +59,39 @@ class SearchService:
         # 执行搜索
         search_results = self.search(enhanced_query, intent=intent, max_results=max_results)
 
-        if not search_results:
+        if not search_results and not stock_context:
             return {
                 "answer": "未找到相关搜索结果。",
                 "sources": [],
                 "intent": intent
             }
 
-        # 使用 LLM 归纳答案
-        context = self._build_context_from_results(search_results)
+        # 使用 LLM 归纳答案（行情数据置顶：这是权威数字，优先于搜索摘要）
+        context = ((stock_context + "\n\n") if stock_context else "") + \
+            self._build_context_from_results(search_results)
         answer = self._generate_answer(query, context, memories)
+
+        sources = []
+        if stock_context:
+            sources.append({
+                "title": "腾讯行情（实时数据）", "url": "https://gu.qq.com/",
+                "source": "tencent-quote", "snippet": stock_context, "score": 1.0,
+            })
+        sources += [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "source": r.get("source", "duckduckgo"),
+                "snippet": r.get("snippet", ""),
+                "score": 0.8  # 简化评分
+            }
+            for r in search_results[:5]
+        ]
 
         return {
             "answer": answer,
-            "sources": [
-                {
-                    "title": r.get("title", ""),
-                    "url": r.get("url", ""),
-                    "source": r.get("source", "duckduckgo"),
-                    "snippet": r.get("snippet", ""),
-                    "score": 0.8  # 简化评分
-                }
-                for r in search_results[:5]
-            ],
-            "intent": intent
+            "sources": sources,
+            "intent": intent,
         }
 
     def _build_context_from_results(self, results: List[Dict]) -> str:

@@ -61,6 +61,13 @@ class ChromaKnowledgeClient:
             kwargs["where"] = where
         return collection.query(**kwargs)
 
+    def get_stored_embeddings(self, where: Dict = None) -> Dict:
+        """按 where 条件读取集合内存量向量 id（删除后的归属校验/清理核对）。"""
+        kwargs = {"include": []}
+        if where:
+            kwargs["where"] = where
+        return self._get_collection().get(**kwargs)
+
     def delete(self, ids: List[str]):
         """删除向量"""
         collection = self._get_collection()
@@ -191,10 +198,16 @@ class KnowledgeService(DBSessionMixin):
             }
 
     def retry_process_file(self, file_id: int) -> Dict:
-        """重试处理失败的文件"""
+        """重试处理失败的文件：清理旧分块/向量并重置状态。
+
+        实际解析由调用方（路由）以后台任务调用 process_file，避免阻塞请求。
+        """
         kb_file = self.db.query(KBFile).filter(KBFile.id == file_id).first()
         if not kb_file:
             return {"error": "File not found"}
+
+        if not kb_file.storage_path or not os.path.exists(kb_file.storage_path):
+            return {"error": "文件不存在，无法重试", "file_id": file_id}
 
         # 删除之前的分块
         self.db.query(KBChunk).filter(KBChunk.file_id == file_id).delete()
@@ -204,10 +217,18 @@ class KnowledgeService(DBSessionMixin):
             except Exception as e:
                 logger.warning(f"[KB] 重试前清理 Chroma 向量失败: {e}")
 
-        # 重新处理（使用落盘路径）
-        if not kb_file.storage_path or not os.path.exists(kb_file.storage_path):
-            return {"error": "文件不存在，无法重试", "file_id": file_id}
-        return self.process_file(file_id, kb_file.storage_path, kb_file.file_type)
+        kb_file.status = "processing"
+        kb_file.error_message = None
+        kb_file.chunk_count = 0
+        kb_file.vector_ids = None
+        self.db.commit()
+
+        return {
+            "file_id": file_id,
+            "status": "processing",
+            "storage_path": kb_file.storage_path,
+            "file_type": kb_file.file_type,
+        }
 
     def get_files(self, user_id: int, status: str = None) -> List[Dict]:
         """获取文件列表"""
@@ -288,48 +309,52 @@ class KnowledgeService(DBSessionMixin):
             # 生成查询向量
             query_embedding = embedding_service.embed(query)
 
-            # 构建过滤条件
-            filter_metadata = {"user_id": user_id}
+            # 构建过滤条件（用户隔离 + 可选文件过滤）
+            conditions = {"user_id": user_id}
             if file_ids:
-                filter_metadata["file_id"] = {"$in": file_ids}
+                conditions["file_id"] = {"$in": file_ids}
+            where_filter = {"$and": [
+                {k: v} for k, v in conditions.items()
+            ]} if len(conditions) > 1 else conditions
 
-            # 查询 Chroma
+            # 查询 Chroma（where 过滤真正生效，保证用户隔离）
             chroma_results = self.chroma_client.query(
                 query_embeddings=[query_embedding],
-                n_results=top_k * 2
+                n_results=top_k * 2,
+                where=where_filter,
             )
 
             # 处理结果
             chroma_ids = chroma_results.get("ids", [[]])[0]
             chroma_distances = chroma_results.get("distances", [[]])[0]
             chroma_metadatas = chroma_results.get("metadatas", [[]])[0]
+            chroma_documents = chroma_results.get("documents", [[]])[0]
 
             for i, chroma_id in enumerate(chroma_ids):
-                if i >= len(chroma_metadatas):
-                    continue
-
-                metadata = chroma_metadatas[i]
-
-                # 应用过滤
-                if file_ids and metadata.get("file_id") not in file_ids:
-                    continue
+                metadata = chroma_metadatas[i] if i < len(chroma_metadatas) else {}
+                # 内容取 Chroma documents（chroma 存储侧），不再误取 metadata["document"]
+                content = chroma_documents[i] if i < len(chroma_documents) else ""
 
                 # 将余弦距离转换为相似度
                 distance = chroma_distances[i] if i < len(chroma_distances) else 0
                 similarity = max(0, 1 - distance)
 
-                # 获取文件信息
-                kb_chunk = self.db.query(KBChunk).filter(KBChunk.id == metadata.get("chunk_index")).first()
+                # 文件信息（创建时间）
+                kb_file = self.db.query(KBFile).filter(
+                    KBFile.id == metadata.get("file_id")
+                ).first()
 
                 results.append({
                     "chunk_id": chroma_id,
-                    "content": metadata.get("document", ""),
+                    "content": content,
                     "file_id": metadata.get("file_id", 0),
                     "chunk_index": metadata.get("chunk_index", 0),
                     "similarity": round(similarity, 4),
                     "metadata": metadata,
-                    "created_at": datetime.now().isoformat() if kb_chunk is None else kb_chunk.created_at.isoformat() if hasattr(kb_chunk, 'created_at') else None
+                    "created_at": kb_file.created_at.isoformat() if kb_file else None,
                 })
+                if len(results) >= top_k:
+                    break
 
             # 如果 Chroma 没有结果，回退到 SQLite
             if not results:
@@ -341,23 +366,21 @@ class KnowledgeService(DBSessionMixin):
 
         return results
 
-    def _search_knowledge_sqlite(self, user_id: int, query: str,
+    def _search_knowledge_sqlite(self, user_id: int, text: str,
                                   file_ids: List[int] = None,
                                   top_k: int = 5) -> List[Dict]:
         """SQLite 关键词搜索（作为回退方案）"""
-        query = self.db.query(KBChunk).join(KBFile).filter(
+        q = self.db.query(KBChunk).join(KBFile, KBChunk.file_id == KBFile.id).filter(
             KBFile.user_id == user_id
         )
 
         if file_ids:
-            query = query.filter(KBFile.id.in_(file_ids))
+            q = q.filter(KBFile.id.in_(file_ids))
 
-        # 简单的关键词匹配
-        query = query.filter(
-            KBChunk.content.like(f"%{query}%")
-        )
+        # 简单的关键词匹配（修复变量遮蔽：不再覆盖入参 query）
+        q = q.filter(KBChunk.content.like(f"%{text}%"))
 
-        chunks = query.order_by(KBFile.created_at.desc()).limit(top_k).all()
+        chunks = q.order_by(KBFile.created_at.desc()).limit(top_k).all()
 
         return [
             {
@@ -372,20 +395,21 @@ class KnowledgeService(DBSessionMixin):
             for c in chunks
         ]
 
-    def qa(self, file_ids: List[int], query: str) -> Dict:
+    def qa(self, file_ids: List[int], query: str, user_id: int = None) -> Dict:
         """
         知识库问答（使用 RAG）
 
         Args:
             file_ids: 要搜索的文件 ID 列表
             query: 问题
+            user_id: 用户 ID（默认取配置的单用户）
 
         Returns:
             包含答案和来源的响应
         """
         # 搜索相关分块
         search_results = self.search_knowledge(
-            user_id=1,  # 默认用户
+            user_id=user_id if user_id is not None else settings.LOCAL_USER_ID,
             query=query,
             file_ids=file_ids,
             top_k=3

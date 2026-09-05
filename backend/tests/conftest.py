@@ -99,9 +99,10 @@ def client():
     os.environ["CHROMA_PERSIST_DIR"] = "./data/test_chroma"
 
     # Re-import to reload with new config
+    # 注意：不能写 `import app.config`（会把局部名 app 重新绑定为包，遮蔽 FastAPI 实例）
     import importlib
-    import app.config
-    importlib.reload(app.config)
+    config_module = importlib.import_module("app.config")
+    importlib.reload(config_module)
 
     # Re-initialize database
     from models.sql_models import init_db

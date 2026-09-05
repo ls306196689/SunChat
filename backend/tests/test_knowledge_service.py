@@ -265,15 +265,125 @@ class TestKnowledgeService:
             file_type="txt"
         )
 
-        # QA
+        # QA（传入属主 user_id，检索按用户隔离）
         result = knowledge_service.qa(
             file_ids=[upload_result["file_id"]],
-            query="SunChat 是什么？"
+            query="SunChat 是什么？",
+            user_id=user_id
         )
 
         assert "answer" in result
         assert "sources" in result
         assert len(result["sources"]) > 0
+        # 修复验证：来源内容取自 Chroma documents，必须非空
+        assert result["sources"][0]["content_preview"].strip()
+        assert "未找到相关文档" not in result["answer"]
+
+    def test_search_knowledge_user_isolation(self, knowledge_service, temp_dir):
+        """用户隔离：A 用户的文档不得被 B 用户检索到（where 过滤真正生效）"""
+        txt_file = os.path.join(temp_dir, "secret.txt")
+        with open(txt_file, "w", encoding="utf-8") as f:
+            f.write("机密信息 只有属主可见 绝不外泄\n" * 5)
+
+        owner = 2081
+        other = 2082
+        up = knowledge_service.upload_file(
+            user_id=owner, filename="secret.txt", original_name="secret.txt",
+            file_type="txt", file_size=os.path.getsize(txt_file)
+        )
+        knowledge_service.process_file(up["file_id"], txt_file, "txt")
+
+        hits_owner = knowledge_service.search_knowledge(user_id=owner, query="机密信息", top_k=5)
+        hits_other = knowledge_service.search_knowledge(user_id=other, query="机密信息", top_k=5)
+
+        assert any("机密" in h["content"] for h in hits_owner)
+        assert all("机密" not in h["content"] for h in hits_other)
+
+    def test_delete_file_full_cleanup(self, knowledge_service, temp_dir):
+        """删除文件：SQLite 分块 + Chroma 向量 + 物理文件都被清理"""
+        txt_file = os.path.join(temp_dir, "cleanup.txt")
+        with open(txt_file, "w", encoding="utf-8") as f:
+            f.write("需要彻底清理的内容 段落一\n段落二\n段落三\n")
+
+        storage = os.path.join(temp_dir, "stored_cleanup.txt")
+        import shutil as _sh
+        _sh.copyfile(txt_file, storage)
+
+        up = knowledge_service.upload_file(
+            user_id=2083, filename="cleanup.txt", original_name="cleanup.txt",
+            file_type="txt", file_size=os.path.getsize(storage), storage_path=storage
+        )
+        knowledge_service.process_file(up["file_id"], storage, "txt")
+
+        assert knowledge_service.delete_file(up["file_id"]) is True
+        assert not os.path.exists(storage)
+        from models.sql_models import KBChunk
+        assert knowledge_service.db.query(KBChunk).filter(
+            KBChunk.file_id == up["file_id"]).count() == 0
+        # Chroma 中该文件向量已清空
+        got = knowledge_service.chroma_client.get_stored_embeddings(
+            where={"file_id": up["file_id"]})
+        assert len(got.get("ids", [])) == 0
+
+    def test_retry_resets_to_processing(self, knowledge_service, temp_dir):
+        """重试：failed 文件重置为 processing 并返回落盘路径"""
+        txt_file = os.path.join(temp_dir, "retry.txt")
+        with open(txt_file, "w", encoding="utf-8") as f:
+            f.write("重试内容 测试段落\n" * 4)
+
+        up = knowledge_service.upload_file(
+            user_id=2084, filename="retry.txt", original_name="retry.txt",
+            file_type="txt", file_size=os.path.getsize(txt_file),
+            storage_path=txt_file
+        )
+        # 人为制造失败状态
+        from models.sql_models import KBFile
+        row = knowledge_service.db.query(KBFile).filter(KBFile.id == up["file_id"]).first()
+        row.status = "failed"
+        row.error_message = "boom"
+        knowledge_service.db.commit()
+
+        result = knowledge_service.retry_process_file(up["file_id"])
+        assert result["status"] == "processing"
+        assert result["storage_path"] == txt_file
+        assert result["file_type"] == "txt"
+
+
+class TestKnowledgeUploadAPI:
+    """上传路由：校验 + 落盘 + 后台处理"""
+
+    def test_upload_rejects_bad_type(self, client):
+        resp = client.post(
+            "/api/v1/kb/upload",
+            files={"file": ("evil.exe", b"MZ\x00\x00", "application/octet-stream")},
+        )
+        assert resp.status_code == 400
+
+    def test_upload_persists_and_processes(self, client):
+        content = "落盘测试正文 段落A\n段落B\n段落C\n".encode("utf-8")
+        resp = client.post(
+            "/api/v1/kb/upload",
+            files={"file": ("persist_test.txt", content, "text/plain")},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["file_id"]
+
+        # BackgroundTasks 在 TestClient 响应后同步执行完毕 → 应变为 ready
+        listed = client.get("/api/v1/kb/files").json()["data"]["files"]
+        mine = [f for f in listed if f["id"] == data["file_id"]]
+        assert mine and mine[0]["status"] == "ready"
+
+        # 删除走真实清理
+        resp_del = client.delete(f"/api/v1/kb/files/{data['file_id']}")
+        assert resp_del.status_code == 200
+        listed = client.get("/api/v1/kb/files").json()["data"]["files"]
+        assert all(f["id"] != data["file_id"] for f in listed)
+
+    def test_delete_missing_file_404(self, client):
+        resp = client.delete("/api/v1/kb/files/999999")
+        assert resp.status_code == 404
+
 
 
 class TestChromaKnowledgeClient:

@@ -58,7 +58,8 @@ watch(() => chatStore.messages, () => {
 }, { deep: true })
 
 async function handleSend() {
-  if (!inputContent.value.trim()) return
+  // 空内容或上一条仍在生成时不重复发送
+  if (!inputContent.value.trim() || chatStore.loading) return
 
   try {
     await chatStore.sendMessage(

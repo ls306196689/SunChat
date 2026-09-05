@@ -20,6 +20,8 @@ export function useMessageInput(inputRef, onSend) {
   }
 
   function handleEnterSend(event) {
+    // 中文输入法：回车确认候选词时不触发发送
+    if (event.isComposing || event.keyCode === 229) return
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       if (onSend && typeof onSend === 'function') {

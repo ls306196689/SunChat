@@ -160,11 +160,11 @@
     }
   ],
   "repo": {
-    "created": false,
-    "remote": null,
-    "branch": "main",
-    "last_pushed_commit": null,
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
     "push_pending": false
   },
-  "updated_at": "2026-09-05T23:59:53+08:00"
+  "updated_at": "2026-09-06T00:03:01+08:00"
 }

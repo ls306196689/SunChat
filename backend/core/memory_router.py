@@ -2,11 +2,11 @@
 SunChat Backend - Memory Router
 根据用户输入决定需要查询/提取什么记忆
 """
-import json
 from typing import List, Dict, Optional
 from datetime import datetime
 
 from core.llm import ollama_service
+from utils.json_parser import parse_json_response, strip_code_fences
 from utils.logger import logger
 
 
@@ -137,54 +137,38 @@ class MemoryRouter:
 """
 
     def _parse_analysis_response(self, response: str) -> Dict:
-        """解析LLM分析响应"""
-        # 清理响应
-        clean_response = response.strip()
+        """解析LLM分析响应（统一走 utils.json_parser，G7）"""
+        result = parse_json_response(response)
+        if result is None:
+            logger.error("[MEMORY_ROUTER] JSON解析失败")
+            return self._fallback_analysis(response)
 
-        # 移除可能的Markdown代码块标记
-        if clean_response.startswith("```json"):
-            clean_response = clean_response[7:]
-        if clean_response.startswith("```"):
-            clean_response = clean_response[3:]
-        if clean_response.endswith("```"):
-            clean_response = clean_response[:-3]
+        # 标准化输出格式
+        memory_types = result.get("memory_types", [])
+        if not isinstance(memory_types, list):
+            memory_types = []
 
-        clean_response = clean_response.strip()
+        query_keywords = result.get("query_keywords", [])
+        if not isinstance(query_keywords, list):
+            query_keywords = []
 
-        # 尝试解析JSON
-        try:
-            result = json.loads(clean_response)
+        # 确定置信度
+        confidence = result.get("confidence", 0.5)
+        if not isinstance(confidence, (int, float)):
+            confidence = 0.5
 
-            # 标准化输出格式
-            memory_types = result.get("memory_types", [])
-            if not isinstance(memory_types, list):
-                memory_types = []
-
-            query_keywords = result.get("query_keywords", [])
-            if not isinstance(query_keywords, list):
-                query_keywords = []
-
-            # 确定置信度
-            confidence = result.get("confidence", 0.5)
-            if not isinstance(confidence, (int, float)):
-                confidence = 0.5
-
-            return {
-                "user_input": "",  # 将在调用处设置
-                "analysis": {
-                    "needs_memory": result.get("needs_memory", True),
-                    "reason": result.get("notes", "LLM分析"),
-                    "confidence": confidence
-                },
-                "recommended_memory_types": memory_types,
-                "query_keywords": query_keywords,
-                "needs_memory_query": result.get("needs_memory", True),
+        return {
+            "user_input": "",  # 将在调用处设置
+            "analysis": {
+                "needs_memory": result.get("needs_memory", True),
+                "reason": result.get("notes", "LLM分析"),
                 "confidence": confidence
-            }
-
-        except json.JSONDecodeError as e:
-            logger.error(f"[MEMORY_ROUTER] JSON解析失败: {e}")
-            return self._fallback_analysis(clean_response)
+            },
+            "recommended_memory_types": memory_types,
+            "query_keywords": query_keywords,
+            "needs_memory_query": result.get("needs_memory", True),
+            "confidence": confidence
+        }
 
     def _fallback_analysis(self, user_input: str) -> Dict:
         """回退分析方案（当LLM分析失败时）"""

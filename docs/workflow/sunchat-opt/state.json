@@ -1,6 +1,6 @@
 {
   "project": "sunchat-opt",
-  "phase": "execute",
+  "phase": "done",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -47,64 +47,64 @@
       "id": 1,
       "title": "测试离线化守卫(mock LLM/embed, 全量pytest可跑)",
       "module": "tests",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 2,
       "title": "KB管道修断(落盘+后台处理+where过滤+delete+sqlite遮蔽)",
       "module": "knowledge",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 3,
       "title": "记忆修断(列表API+冲突以新为准+user隔离)",
       "module": "memory",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 4,
       "title": "对话降本(规则优先路由+去双注入+多轮+搜索接入+异步提取+json_parser落地)",
       "module": "chat",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 5,
       "title": "SSE流式端点+前端流式渲染",
       "module": "chat/frontend",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 6,
       "title": "会话PATCH/DELETE真实现",
       "module": "chat",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 7,
       "title": "认证诚实化+user_id收敛+sanitize接线",
       "module": "auth/security",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 8,
       "title": "Agent原生tool_calls重写+端点+回退",
       "module": "agent",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 9,
       "title": "仓库卫生+全量测试终跑+文档执行结果",
       "module": "infra",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     }
   ],
   "requirements_version": 1,
@@ -166,5 +166,5 @@
     "last_pushed_commit": null,
     "push_pending": false
   },
-  "updated_at": "2026-09-05T22:18:30+08:00"
+  "updated_at": "2026-09-05T23:59:53+08:00"
 }

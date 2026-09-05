@@ -97,8 +97,8 @@ def agent_chat(req, db=Depends(get_db)):
   - [ ] "今天有什么新闻" → 触发 web_search
 
 ## 6. 执行结果（执行后回填）
-- [ ] 原生 tool_calls 循环
-- [ ] 纯文本回退
-- [ ] /chat/agent 端点
-- [ ] 无状态化
-- 测试结果：
+- [x] 原生 tool_calls 循环（Ollama /api/chat tools 参数；role:tool 紧跟带 tool_calls 的 assistant、带 name；ToolResult→json.dumps 序列化，修 A2/A3/A4）
+- [x] 纯文本回退（不支持 tools 的模型：异常后无 tools 重试 / 不产 tool_calls 直接返回文本；max_iterations 兜底）
+- [x] /chat/agent 端点（sanitize + 会话落库 + tool_trace 返回），已注册 main.py
+- [x] 无状态化（每次 run 局部 messages，修 A7）；删 ChatTool（A5）；ToolResult 单一来源 schema.py（A8）；user_id 强制注入且 LLM 覆盖无效（A6）
+- 测试结果：tests/test_agent.py 11 通过（工具→答案、多工具、max 迭代、直答、配对合法性、JSON 字符串参数、无状态隔离、越权免疫、文本回退、端点两条）。实机：qwen2.5:7b/新版 Ollama 上"记住我叫X/查我上周/今天新闻"三条路径待验。

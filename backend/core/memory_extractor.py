@@ -2,11 +2,11 @@
 SunChat Backend - Memory Extractor
 从对话中提取记忆并构建提取prompt
 """
-import json
 from typing import List, Dict, Optional
 from datetime import datetime
 
 from core.llm import ollama_service
+from utils.json_parser import parse_json_response
 from utils.logger import logger
 
 
@@ -125,56 +125,38 @@ AI响应: {ai_response}{context_text}
 """
 
     def _parse_extraction_response(self, response: str) -> Dict:
-        """解析LLM提取响应"""
-        # 清理响应
-        clean_response = response.strip()
-
-        # 移除可能的Markdown代码块标记
-        if clean_response.startswith("```json"):
-            clean_response = clean_response[7:]
-        if clean_response.startswith("```"):
-            clean_response = clean_response[3:]
-        if clean_response.endswith("```"):
-            clean_response = clean_response[:-3]
-
-        clean_response = clean_response.strip()
-
-        # 尝试解析JSON
-        try:
-            result = json.loads(clean_response)
-
-            # 标准化输出格式
-            memories = result.get("memories", [])
-            if not isinstance(memories, list):
-                memories = []
-
-            # 标准化每条记忆的格式
-            normalized_memories = []
-            for mem in memories:
-                normalized_mem = self._normalize_memory(mem)
-                if normalized_mem:
-                    normalized_memories.append(normalized_mem)
-
-            # 确定总置信度
-            confidence = result.get("confidence", 0.5)
-            if normalized_memories:
-                # 平均置信度
-                avg_conf = sum(m.get("confidence", 0.5) for m in normalized_memories) / len(normalized_memories)
-                confidence = max(confidence, avg_conf)
-
-            return {
-                "memories": normalized_memories,
-                "summary": result.get("summary", f"提取了 {len(normalized_memories)} 条记忆"),
-                "confidence": min(1.0, confidence),
-                "extracted_count": len(normalized_memories)
-            }
-
-        except json.JSONDecodeError as e:
-            logger.error(f"[MEMORY_EXTRACTOR] JSON解析失败: {e}")
-            logger.debug(f"[MEMORY_EXTRACTOR] 原始响应: {clean_response[:300]}")
-
+        """解析LLM提取响应（统一走 utils.json_parser，G7）"""
+        result = parse_json_response(response)
+        if result is None:
+            logger.error("[MEMORY_EXTRACTOR] JSON解析失败")
+            logger.debug(f"[MEMORY_EXTRACTOR] 原始响应: {response[:300]}")
             # 尝试从文本中提取信息
             return self._fallback_parse(response)
+
+        # 标准化输出格式
+        memories = result.get("memories", [])
+        if not isinstance(memories, list):
+            memories = []
+
+        # 标准化每条记忆的格式
+        normalized_memories = []
+        for mem in memories:
+            normalized_mem = self._normalize_memory(mem)
+            if normalized_mem:
+                normalized_memories.append(normalized_mem)
+
+        # 确定总置信度
+        confidence = result.get("confidence", 0.5)
+        if normalized_memories:
+            avg_conf = sum(m.get("confidence", 0.5) for m in normalized_memories) / len(normalized_memories)
+            confidence = max(confidence, avg_conf)
+
+        return {
+            "memories": normalized_memories,
+            "summary": result.get("summary", f"提取了 {len(normalized_memories)} 条记忆"),
+            "confidence": min(1.0, confidence),
+            "extracted_count": len(normalized_memories),
+        }
 
     def _normalize_memory(self, mem: Dict) -> Optional[Dict]:
         """标准化记忆格式"""

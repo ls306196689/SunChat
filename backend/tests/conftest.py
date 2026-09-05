@@ -11,6 +11,15 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+@pytest.fixture(scope="session", autouse=True)
+def offline_network_guard():
+    """全局离线守卫:LLM/嵌入/模型列表/搜索全部走 fakes,测试不触网。"""
+    import fakes
+    patchers = fakes.install()
+    yield
+    fakes.uninstall(patchers)
+
+
 @pytest.fixture(scope="module", autouse=True)
 def setup_test_environment():
     """Setup test environment before tests"""

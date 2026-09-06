@@ -40,7 +40,7 @@ function scrollToBottom() {
 }
 
 // 输入框行为控制
-const { handleKeyDown, isEnterWithoutShift, handleEnterSend } = useMessageInput(() => handleSend())
+const { handleKeyDown, isEnterWithoutShift, handleEnterSend } = useMessageInput(inputRef, () => handleSend())
 
 onMounted(() => {
   chatStore.fetchSessions()
@@ -61,19 +61,22 @@ async function handleSend() {
   // 空内容或上一条仍在生成时不重复发送
   if (!inputContent.value.trim() || chatStore.loading) return
 
+  const content = inputContent.value
+  inputContent.value = ''
+
   try {
     await chatStore.sendMessage(
-      inputContent.value,
+      content,
       memoryEnabled.value,
       searchEnabled.value
     )
-    inputContent.value = ''
-    
+
     // 自动滚动到底部
     nextTick(() => {
       scrollToBottom()
     })
   } catch (error) {
+    if (!inputContent.value) inputContent.value = content
     message.error('发送消息失败: ' + (error.message || '未知错误'))
   }
 }

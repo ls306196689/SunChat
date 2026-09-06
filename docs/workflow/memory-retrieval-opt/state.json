@@ -1,7 +1,14 @@
 {
   "project": "memory-retrieval-opt",
-  "phase": "clarify",
-  "gates": [],
+  "phase": "architecture",
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-06T16:00:00+08:00",
+      "confirmed_by": "user",
+      "note": "FR1-8/AC1-5 冻结, D-001~005"
+    }
+  ],
   "clarifications": [
     {
       "id": 1,
@@ -95,5 +102,5 @@
     "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
     "push_pending": false
   },
-  "updated_at": "2026-09-06T15:55:00+08:00"
+  "updated_at": "2026-09-06T16:00:00+08:00"
 }

@@ -78,6 +78,28 @@ class StorageService(DBSessionMixin):
             self.db.commit()
         return result
 
+    def prune_orphan_vectors(self, dry_run: bool = False) -> Dict:
+        """删除 Chroma 中不再被任何 SQLite 记忆引用的孤儿向量。"""
+        referenced = {m.vector_id for m in
+                      self.db.query(Memory).filter(Memory.vector_id != None).all()  # noqa: E711
+                      if m.vector_id}
+        try:
+            all_ids = set(memory_service_chroma.all_vector_ids())
+        except Exception as e:
+            logger.warning(f"[RECONCILE] 孤儿扫描失败: {e}")
+            return {"orphans": 0, "removed": 0, "error": str(e)}
+        orphans = all_ids - referenced
+        removed = 0
+        if orphans and not dry_run:
+            try:
+                memory_service_chroma.delete(list(orphans))
+                removed = len(orphans)
+            except Exception as e:
+                logger.warning(f"[RECONCILE] 孤儿删除失败: {e}")
+        if orphans:
+            logger.info(f"[RECONCILE] 孤儿向量: {len(orphans)}, 已删除: {removed}")
+        return {"orphans": len(orphans), "removed": removed}
+
     def ensure_vector(self, memory_id: str, content: str, user_id: int,
                       memory_type: str = "semantic", category: str = None,
                       importance: int = 5) -> Optional[str]:

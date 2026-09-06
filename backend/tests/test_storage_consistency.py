@@ -156,3 +156,30 @@ class TestRebuild:
         assert r2res["rebuilt"] == 1 and r2res["success"]
         db.expire_all()
         assert all(m.vector_id for m in db.query(Memory).all())
+
+
+
+class TestPruneOrphans:
+    def test_removes_only_unreferenced(self, db):
+        from services.memory_service import memory_service
+        cc = memory_service.chroma_client
+        # r1: 记忆+被引用向量; orphan: 只写向量无记忆引用
+        m = _mk(db, "r1")
+        vid_ref = ss.storage_service.ensure_vector("r1", m.content, 31)
+        m.vector_id = vid_ref
+        db.commit()
+        vid_orphan = ss.storage_service.ensure_vector("ghost", "幽灵内容", 31)
+        assert cc.has_ids([vid_ref, vid_orphan]) == {vid_ref, vid_orphan}
+
+        r = ss.storage_service.prune_orphan_vectors()
+        assert r["orphans"] >= 1 and r["removed"] >= 1
+        assert vid_ref in cc.has_ids([vid_ref])       # 被引用保留
+        assert vid_orphan not in cc.has_ids([vid_orphan])  # 孤儿删除
+
+    def test_dry_run_keeps(self, db):
+        from services.memory_service import memory_service
+        cc = memory_service.chroma_client
+        vid = ss.storage_service.ensure_vector("ghost2", "孤儿2", 31)
+        r = ss.storage_service.prune_orphan_vectors(dry_run=True)
+        assert r["orphans"] >= 1 and r["removed"] == 0
+        assert vid in cc.has_ids([vid])

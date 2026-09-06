@@ -55,9 +55,10 @@ async def lifespan(app: FastAPI):
             if model_manager.is_available():
                 from services.storage_service import storage_service
                 r = storage_service.reconcile()
+                p = storage_service.prune_orphan_vectors()
                 from core.fts_index import fts_bootstrap_from_sqlite
                 fts_bootstrap_from_sqlite()
-                logger.info(f"[STARTUP] 记忆对账: {r}")
+                logger.info(f"[STARTUP] 记忆对账: {r} 孤儿清理: {p}")
         except Exception as e:
             logger.warning(f"[STARTUP] 记忆对账失败(不阻断): {e}")
 

@@ -118,6 +118,12 @@ class ChromaClient:
             logger.warning(f"[CHROMA] has_ids 失败 - n:{len(ids)}: {e}")
             return set()
 
+    def all_vector_ids(self) -> List[str]:
+        """集合内全部向量 id(孤儿对账用)。"""
+        collection = self._get_collection()
+        res = collection.get(include=[])
+        return list(res.get("ids", []) or [])
+
     def collection_model(self) -> str:
         """集合 metadata 记录的嵌入模型（无则空串）。"""
         try:

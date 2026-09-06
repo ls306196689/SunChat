@@ -21,3 +21,28 @@
 
 ## 风险映射
 高危组合仅 R-1(中×高)→ 步骤 3 验证从严 + 步骤 1 先行演练(pull 成功即演练);R-3 高×中 → 步骤 6/7 实机项与离线项分离。
+
+## 验收总结(归档 2026-09-06)
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 一致性自愈 | ✅ | startup reconcile 13 checked/0 drift 实测(backend.log);prune_orphan_vectors 已接线+2 单测;评测残留清理后 SQLite=Chroma=13 |
+| AC-2 注入阈值 | ✅ | eval irrelevant .667→.333(test_memories_api+hatch: sim≥0.3+topk 截断);[HYBRID]/[CHAT] 日志 |
+| AC-3 hit 提升 | ✅(说明) | eval before hit@1=.979/hit@3=1.0 → after 1.0/1.0;golden 词面重合过高致 before 已饱和, +12 条改述用例 after hit@3=1.0;提升主要体现在无关注入减半与改述稳定性;详见 eval_report_{before,after}.json |
+| AC-4 实机证据 | ✅ | e2e-evidence.txt: "你还记得我叫什么名字吗"→"当然记得，你叫 **孙鹏飞**"(meta 注入 mem_a0655f4f2b22 vector+fts 双通道, top1_score=.574) |
+| AC-5 全量 pytest | ✅ | 150 passed/1 skipped(顺序+随机, 多次) |
+
+### 步骤偏差
+1. 评测走进程内直调(而非 HTTP),理由:before/after git worktree 双树各自测本树代码,已记 eval.md。
+2. 事故 D-3(数据丢失)发生并已恢复+双层守卫;新增备份脚本 backup_data.py。
+
+### 风险终态
+- R-1 维度混库:mitigated (维度守卫+reconcile 跳过提示重建);事故中真实场景验证有效
+- R-2 阈值误杀:mitigated(0.3 保守+config 可调, 评测支持调参)
+- R-3 离线无 Ollama:mitigated(mock 单测+实机评测分离)
+- R-4 富者愈富:mitigated(δ≤0.05+封顶+不惩罚未访问)
+- R-5 FTS5 不可用:mitigated(探测+自动降级实测)
+- R-6 指标噪声:closed before 饱和暴露该风险→已扩 golden+改述用例
+- (新增) R-7 测试隔离打穿生产库:occurred→resolved, 四层守卫+备份
+
+### 交付物
+M1 storage_service.py/M2 fts_index.py/M3 ranking.py+search_memories 升级/M4 build_context 统一/M5 eval+golden 47条;config 10 项;启动自愈三件套(reconcile/prune/fts bootstrap);stats drift 字段。

@@ -1,0 +1,12 @@
+用户叫孙鹏飞用户曾期望 AI 记住其身份与爱好，多次询问过‘你知道我是谁吗’用户喜欢跑步、打羽毛球、乒乓球、唱歌、看书和健身当然记得，你叫 **孙鹏飞**。  \n我也记得你喜欢跑步、打羽毛球、乒乓球、唱歌、看书和健身，以前还喜欢喝可乐。
+
+=== 后端启动自愈日志(20:32:09) ===
+2026-09-06 20:42:43 | INFO     | sunchat | [FTS] memory_fts 就绪
+2026-09-06 20:42:43 | INFO     | sunchat | [FTS] memory_fts 就绪
+2026-09-06 20:42:43 | INFO     | sunchat | [FTS] bootstrap 完成 - 同步行数:66
+2026-09-06 20:42:44 | INFO     | sunchat | [FTS] bootstrap 完成 - 同步行数:66
+2026-09-06 20:42:44 | INFO     | sunchat | [STARTUP] 记忆对账: {'checked': 66, 'missing': 0, 'dangling': 0, 'repaired': 0, 'failed': 0, 'drift': False} 孤儿清理: {'orphans': 0, 'removed': 0}
+=== 注入+检索日志 ===
+2026-09-06 20:43:09 | INFO     | sunchat | [HYBRID] 检索完成 vec:2 fts:1 注入:2 top1_score:0.791
+2026-09-06 20:43:09 | INFO     | sunchat | [HYBRID] 检索完成 vec:1 fts:1 注入:1 top1_score:0.8746
+2026-09-06 20:43:09 | INFO     | sunchat | [HYBRID] 检索完成 vec:1 fts:1 注入:1 top1_score:0.7722

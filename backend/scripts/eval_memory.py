@@ -116,8 +116,9 @@ def run_eval(user_id: int, topk: int, quiet: bool = False):
             print(f"[eval] {mark} {case['id']} q={case['query']} -> {topk_contents[:2]}")
 
     if not quiet:
-        print(f"[eval] 清理评测用户 {user_id} ...")
+        print(f"[eval] 清理评测用户（base {user_id} 及 {n} 个用例池）...")
     cleanup_user(user_id)
+    cleanup_cases(user_id, n)
 
     return {
         "run_at": datetime.now().isoformat(),

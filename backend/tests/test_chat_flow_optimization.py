@@ -262,3 +262,49 @@ class TestMessageAPI:
 
         msgs = client.get(f"/api/v1/chat/sessions/{sid}/messages").json()["data"]["messages"]
         assert all(m["content"] for m in msgs)
+
+
+class TestInjectionUnify:
+    """M4: 注入统一走混合检索 + top_k 走 config + 死代码清除"""
+
+    def _session(self, service, uid):
+        return int(service.create_session(user_id=uid)["session_id"])
+
+    def test_dead_code_removed(self):
+        from services.chat_service import ChatService
+        assert not hasattr(ChatService, "build_memory_context")
+
+    def test_inject_topk_and_scores(self, service, monkeypatch):
+        from services.memory_service import memory_service
+        from app.config import settings
+        uid = 5201
+        sid = self._session(service, uid)
+        for i in range(8):
+            memory_service.create_memory(user_id=uid, content=f"用户偏好事项{i} 咖啡口味",
+                                         importance=6, confidence=0.9)
+        ctx = service.build_context(user_id=uid, session_id=sid,
+                                    content="我的咖啡口味偏好有哪些", memory_enabled=True,
+                                    search_enabled=False)
+        assert len(ctx["memory_context"]) <= settings.MEMORY_INJECT_TOPK
+        assert all("final_score" in m for m in ctx["memory_context"])
+
+    def test_user_input_backfill(self, service, monkeypatch):
+        """LLM 路由返回空 user_input → build_context 兜底填原文"""
+        captured = {}
+        from core import memory_router as mr_mod
+        monkeypatch.setattr(mr_mod.memory_router, "analyze_memory_need",
+                            lambda *a, **kw: {"needs_memory_query": True,
+                                              "recommended_memory_types": [],
+                                              "query_keywords": ["咖啡"],
+                                              "user_input": ""})
+        from services.memory_service import memory_service
+        orig = memory_service.search_memories_by_analysis
+        def spy(user_id, analysis_result, top_k):
+            captured.update(analysis_result)
+            return orig(user_id=user_id, analysis_result=analysis_result, top_k=top_k)
+        monkeypatch.setattr(memory_service, "search_memories_by_analysis", spy)
+        uid = 5202
+        sid = self._session(service, uid)
+        service.build_context(user_id=uid, session_id=sid, content="我的咖啡偏好",
+                              memory_enabled=True, search_enabled=False)
+        assert captured.get("user_input") == "我的咖啡偏好"

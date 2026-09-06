@@ -126,31 +126,6 @@ AI 回答: {ai_response}
             logger.error(f"[CHAT] 记忆提取失败 - 错误:{e}, 响应: {response[:300] if 'response' in dir() else 'N/A'}")
             return []
 
-    def build_memory_context(self, user_id: int, query: str, top_k: int = 3) -> List[Dict]:
-        """构建记忆上下文（使用 Chroma 向量检索）"""
-        try:
-            # 使用语义检索搜索相关记忆
-            results = memory_service.search_memories(
-                user_id=user_id,
-                query=query,
-                top_k=top_k
-            )
-
-            # 格式化为记忆上下文
-            return [
-                {
-                    "id": r.get("memory_id", ""),
-                    "content": r.get("content", ""),
-                    "similarity": r.get("similarity", 0),
-                    "type": r.get("metadata", {}).get("type", "semantic"),
-                    "category": r.get("metadata", {}).get("category", "general")
-                }
-                for r in results if r.get("similarity", 0) > 0.3  # 过滤低相似度结果
-            ]
-        except Exception as e:
-            logger.error(f"[CHAT] 构建记忆上下文失败 - 错误:{e}")
-            return []
-
     def build_search_context(self, query: str, memories: List[Dict]) -> Dict:
         """构建搜索上下文"""
         return search_service.route_query(query, {"memories": memories} if memories else None)
@@ -268,6 +243,9 @@ AI 回答: {ai_response}
         # 记忆需求分析（规则优先：问候语等 0 LLM 调用）
         if memory_enabled:
             analysis_result = memory_router.analyze_memory_need(content)
+            # M3 原文优先策略依赖 user_input 字段(LLM 路径可能回空), 兜底填充
+            if not analysis_result.get("user_input"):
+                analysis_result["user_input"] = content
         else:
             analysis_result = {"needs_memory_query": False,
                                "recommended_memory_types": [], "query_keywords": []}
@@ -276,7 +254,10 @@ AI 回答: {ai_response}
         if memory_enabled and analysis_result.get("needs_memory_query", False):
             try:
                 memory_context = memory_service.search_memories_by_analysis(
-                    user_id=user_id, analysis_result=analysis_result, top_k=5)
+                    user_id=user_id, analysis_result=analysis_result,
+                    top_k=settings.MEMORY_INJECT_TOPK)
+                logger.info(f"[CHAT] 记忆注入 {len(memory_context)}条 "
+                            f"top1_score={memory_context[0].get('final_score') if memory_context else '-'}")
             except Exception as e:
                 logger.error(f"[CHAT] 查询记忆失败 - 错误:{e}")
 

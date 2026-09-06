@@ -65,7 +65,7 @@ class TestChatService:
         assert result["title"] == "测试会话"
 
     def test_build_memory_context(self, chat_service):
-        """Test building memory context"""
+        """Test building memory context (经混合检索主路径)"""
         user_id = 4002
 
         # Create some memories first
@@ -74,28 +74,31 @@ class TestChatService:
             user_id=user_id,
             content="用户喜欢 Python 编程语言",
             memory_type="semantic",
-            category="skill"
+            category="skill",
+            confidence=0.9, importance=7
         )
         memory_service.create_memory(
             user_id=user_id,
             content="用户熟悉 Vue 框架",
             memory_type="semantic",
-            category="skill"
+            category="skill",
+            confidence=0.9, importance=7
         )
 
-        # Build memory context
-        context = chat_service.build_memory_context(
+        # Build memory context via hybrid search
+        context = memory_service.search_memories(
             user_id=user_id,
             query="我应该学习什么编程语言",
             top_k=3
         )
 
         assert isinstance(context, list)
-        # May or may not have results depending on embedding similarity
+        # 直接词命中的记忆应可召回（FTS 通道）
+        ctx = memory_service.search_memories(user_id=user_id, query="Python", top_k=3)
+        assert ctx
         for item in context:
             assert "content" in item
             assert "similarity" in item
-            assert "type" in item
 
     def test_build_search_context(self, chat_service):
         """Test building search context"""
@@ -166,7 +169,7 @@ class TestChatService:
         assert len(messages["messages"]) >= 2  # User message + AI response
 
     def test_build_memory_context_with_filters(self, chat_service):
-        """Test building memory context with specific filters"""
+        """Test memory context returns content rows (types preserved in metadata)"""
         user_id = 4004
 
         # Create memories with different types
@@ -175,25 +178,26 @@ class TestChatService:
             user_id=user_id,
             content="用户喜欢 Python",
             memory_type="semantic",
-            category="skill"
+            category="skill",
+            confidence=0.9, importance=7
         )
         memory_service.create_memory(
             user_id=user_id,
             content="2024-01-01 用户完成项目",
             memory_type="episodic",
-            category="event"
+            category="event",
+            confidence=0.9, importance=7
         )
 
-        # Build context
-        context = chat_service.build_memory_context(
+        # Retrieve
+        context = memory_service.search_memories(
             user_id=user_id,
-            query="编程",
+            query="Python",
             top_k=5
         )
 
         assert isinstance(context, list)
-        # Check that we got some results
-        assert len(context) >= 0  # May have zero if similarity is too low
+        assert len(context) >= 0  # similarity 阈值下可能为 0
         for item in context:
             assert "content" in item
             assert "similarity" in item

@@ -75,6 +75,26 @@ class ChromaClient:
         collection = self._get_collection()
         return collection.count()
 
+    def has_ids(self, ids: List[str]) -> set:
+        """返回存在于此集合中的 id 子集（对账用）。"""
+        if not ids:
+            return set()
+        try:
+            collection = self._get_collection()
+            got = collection.get(ids=ids, include=[])
+            return set(got.get("ids", []) or [])
+        except Exception as e:
+            logger.warning(f"[CHROMA] has_ids 失败 - n:{len(ids)}: {e}")
+            return set()
+
+    def collection_model(self) -> str:
+        """集合 metadata 记录的嵌入模型（无则空串）。"""
+        try:
+            meta = self._get_collection().metadata or {}
+            return str(meta.get("embedding_model", "") or "")
+        except Exception:
+            return ""
+
     def reset(self):
         """重置 Chroma 集合（用于测试）"""
         try:
@@ -169,6 +189,13 @@ class MemoryService(DBSessionMixin):
         self.db.add(memory)
         self.db.commit()
         self.db.refresh(memory)
+
+        # FTS 关键词索引同步(提交后; 失败不影响主链路, 启动 bootstrap 兜底)
+        try:
+            from core.fts_index import fts_sync_upsert
+            fts_sync_upsert(memory.id, memory.content)
+        except Exception as e:
+            logger.warning(f"[MEMORY] FTS 同步失败(忽略): {e}")
 
         logger.info(f"[MEMORY] 创建记忆成功 - memory_id:{memory_id}, content:{content[:50]}..., vector_id:{vector_id}")
 
@@ -320,6 +347,12 @@ class MemoryService(DBSessionMixin):
         self.db.commit()
         self.db.refresh(memory)
 
+        try:
+            from core.fts_index import fts_sync_upsert
+            fts_sync_upsert(memory.id, memory.content)
+        except Exception as e:
+            logger.warning(f"[MEMORY] FTS 同步失败(忽略): {e}")
+
         return {
             "id": memory.id,
             "type": memory.type,
@@ -345,6 +378,12 @@ class MemoryService(DBSessionMixin):
         # 从 SQLite 删除
         memory.is_active = False
         self.db.commit()
+
+        try:
+            from core.fts_index import fts_sync_delete
+            fts_sync_delete(memory_id)
+        except Exception as e:
+            logger.warning(f"[MEMORY] FTS 删除同步失败(忽略): {e}")
         return True
 
     def list_memories(self, user_id: int, memory_type: str = None,
@@ -418,8 +457,19 @@ class MemoryService(DBSessionMixin):
             "by_type": {k: v for k, v in type_counts},
             "by_category": {k: v for k, v in category_counts},
             "avg_confidence": round(float(avg_conf), 4) if avg_conf else 0.0,
-            "chroma_collection_size": self.chroma_client.count()
+            "chroma_collection_size": self.chroma_client.count(),
         }
+
+    def get_drift(self) -> Dict:
+        """SQLite 活跃记忆 vs Chroma 向量的覆盖缺口统计（只读, 供 stats 前端展示）。"""
+        from sqlalchemy import func
+        missing = self.db.query(func.count(Memory.id)).filter(
+            Memory.is_active == True,  # noqa: E712
+            (Memory.vector_id == None) | (Memory.vector_id == "")  # noqa: E711
+        ).scalar() or 0
+        total_vec = self.chroma_client.count()
+        return {"vector_missing": int(missing), "chroma_size": int(total_vec),
+                "drift": bool(missing)}
 
     def record_emotion(
         self,
@@ -486,9 +536,12 @@ class MemoryService(DBSessionMixin):
         return results
 
     def update_or_create_memory(self, user_id: int, content: str, memory_type: str = "semantic",
-                                 category: str = None, importance: int = 5) -> Dict:
+                                 category: str = None, importance: int = 5,
+                                 confidence: float = 0.5) -> Dict:
         """
         更新或创建记忆 - 如果存在冲突的记忆则更新，否则创建新记忆
+
+        写入阈值(D-004 宁缺毋滥): confidence/importance 低于 config 阈值直接拒绝入库。
 
         Args:
             user_id: 用户ID
@@ -496,10 +549,19 @@ class MemoryService(DBSessionMixin):
             memory_type: 记忆类型
             category: 记忆分类
             importance: 重要性
+            confidence: 提取置信度(来自 memory_extractor)
 
         Returns:
-            记忆信息
+            记忆信息; 被阈值拒绝时 {"action": "rejected", "reason": ...}
         """
+        from services.storage_service import write_allowed
+        if not write_allowed(confidence, importance):
+            logger.info(f"[MEMORY] 低于写入阈值, 拒绝入库 - conf:{confidence}, imp:{importance}, "
+                        f"content:{content[:40]}")
+            return {"action": "rejected",
+                    "reason": f"confidence<{settings.MEMORY_WRITE_MIN_CONFIDENCE} "
+                              f"or importance<{settings.MEMORY_WRITE_MIN_IMPORTANCE}"}
+
         logger.info(f"[MEMORY] 检查并更新/创建记忆 - 用户:{user_id}, 内容:{content[:50]}...")
 
         # 首先搜索是否已存在相似记忆
@@ -526,28 +588,30 @@ class MemoryService(DBSessionMixin):
                     existing.confidence = min(1.0, existing.confidence + 0.1)
 
                     try:
+                        # 先生成新向量成功, 再删旧向量(顺序防丢)
+                        from services.storage_service import storage_service
+                        new_vector_id = storage_service.ensure_vector(
+                            existing.id, content, user_id,
+                            existing.type, existing.category, existing.importance)
+                        if not new_vector_id:
+                            raise RuntimeError("ensure_vector 返回 None")
                         if existing.vector_id:
-                            self.chroma_client.delete([existing.vector_id])
-                        new_vector_id = f"vec_{uuid.uuid4().hex[:12]}"
-                        embedding = embedding_service.embed(content)
-                        self.chroma_client.add(
-                            ids=[new_vector_id],
-                            documents=[content],
-                            embeddings=[embedding],
-                            metadatas=[{
-                                "memory_id": existing.id,
-                                "user_id": user_id,
-                                "type": existing.type,
-                                "category": existing.category or "general",
-                                "importance": existing.importance,
-                            }],
-                        )
+                            try:
+                                self.chroma_client.delete([existing.vector_id])
+                            except Exception:
+                                pass
                         existing.vector_id = new_vector_id
                     except Exception as e:
                         logger.warning(f"[MEMORY] 冲突更新重嵌入失败（保留旧向量）: {e}")
 
                     self.db.commit()
                     self.db.refresh(existing)
+
+                    try:
+                        from core.fts_index import fts_sync_upsert
+                        fts_sync_upsert(existing.id, content)
+                    except Exception as e:
+                        logger.warning(f"[MEMORY] FTS 同步失败(忽略): {e}")
 
                     return {
                         "id": existing.id,

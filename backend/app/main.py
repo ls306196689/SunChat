@@ -40,6 +40,27 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[STARTUP] Ollama 自检失败: {e}")
 
+    # 4. FTS 关键词索引就绪 + 自愈重建
+    try:
+        from core.fts_index import init_fts, fts_bootstrap_from_sqlite
+        if init_fts():
+            fts_bootstrap_from_sqlite()
+    except Exception as e:
+        logger.warning(f"[STARTUP] FTS 初始化失败(关键词通道降级): {e}")
+
+    # 5. 存储一致性对账自愈（SQLite↔Chroma）
+    if settings.RECONCILE_ON_STARTUP:
+        try:
+            from core.model_manager import model_manager
+            if model_manager.is_available():
+                from services.storage_service import storage_service
+                r = storage_service.reconcile()
+                from core.fts_index import fts_bootstrap_from_sqlite
+                fts_bootstrap_from_sqlite()
+                logger.info(f"[STARTUP] 记忆对账: {r}")
+        except Exception as e:
+            logger.warning(f"[STARTUP] 记忆对账失败(不阻断): {e}")
+
     yield
 
     # 关闭资源（线程 Session 随 worker 线程生命周期，无需显式关闭）

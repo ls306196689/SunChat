@@ -71,10 +71,10 @@ def fake_chat_reply(payload: Dict) -> str:
         name = re.search(r"我叫([\u4e00-\u9fa5·]{1,8})", user_content)
         if name:
             mem = {"content": f"用户叫{name.group(1)}", "type": "semantic",
-                   "category": "name", "importance": 10}
+                   "category": "name", "importance": 10, "confidence": 0.9}
         elif user_content:
             mem = {"content": user_content, "type": "semantic",
-                   "category": "general", "importance": 5}
+                   "category": "general", "importance": 5, "confidence": 0.7}
         else:
             return json.dumps({"memories": []}, ensure_ascii=False)
         return json.dumps({"memories": [mem]}, ensure_ascii=False)

@@ -59,10 +59,11 @@ def switch_embedding_model(req: SwitchModelRequest):
 
 @router.post("/models/rebuild-vectors")
 def rebuild_vectors():
-    """重建向量库（切换嵌入模型后保证检索准确）"""
+    """重建向量库（切换嵌入模型后保证检索准确；支持断点续跑）"""
     try:
         logger.info("[MODELS] 触发向量库重建")
-        result = memory_service.rebuild_vector_store()
+        from services.storage_service import storage_service
+        result = storage_service.rebuild()
         if not result.get("success"):
             return {
                 "code": 200,

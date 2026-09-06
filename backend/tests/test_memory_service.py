@@ -274,7 +274,8 @@ class TestMemoryService:
         m = memory_service.create_memory(user_id=user_id, content="用户养了一只猫",
                                          category="preference")
         again = memory_service.update_or_create_memory(
-            user_id=user_id, content="用户养了一只猫", category="preference")
+            user_id=user_id, content="用户养了一只猫", category="preference",
+            confidence=0.9)
         assert again["action"] == "updated"
         assert again["id"] == m["id"]
         active = memory_service.list_memories(user_id=user_id)["total"]
@@ -293,7 +294,8 @@ class TestMemoryService:
                            "similarity": 0.95, "metadata": {}}],
         )
         result = memory_service.update_or_create_memory(
-            user_id=user_id, content="用户住在上海", category="person")
+            user_id=user_id, content="用户住在上海", category="person",
+            confidence=0.9)
 
         assert result["action"] == "updated"
         assert result["content"] == "用户住在上海"

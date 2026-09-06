@@ -105,8 +105,8 @@
       "id": 3,
       "title": "存储一致性 reconcile/rebuild/写阈值+单测",
       "module": "M1",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 4,
@@ -196,5 +196,5 @@
     "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
     "push_pending": false
   },
-  "updated_at": "2026-09-06T18:40:00+08:00"
+  "updated_at": "2026-09-06T18:55:00+08:00"
 }

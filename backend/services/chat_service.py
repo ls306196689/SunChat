@@ -368,7 +368,10 @@ AI 回答: {ai_response}
                         memory_type=mem_data.get("type", "semantic"),
                         category=mem_data.get("category", "general"),
                         importance=mem_data.get("importance", 5),
+                        confidence=mem_data.get("confidence", 0.5),
                     )
+                    if result.get("action") == "rejected":
+                        continue
                     mem_data["action"] = result.get("action", "created")
                     memory_updates.append(mem_data)
                 except Exception as e:

@@ -1,0 +1,99 @@
+{
+  "project": "memory-retrieval-opt",
+  "phase": "clarify",
+  "gates": [],
+  "clarifications": [
+    {
+      "id": 1,
+      "question": "嵌入模型是否装 bge-m3(约1.2GB,中文语义显著强于 nomic-embed-text)?",
+      "resolution": "装 bge-m3",
+      "status": "closed"
+    },
+    {
+      "id": 2,
+      "question": "混合检索(关键词+向量 RRF 融合)做不做?关键词通道用 rank_bm25(内存)还是 SQLite FTS5(落库)?",
+      "resolution": "做,通道用 SQLite FTS5(trigram)",
+      "status": "closed"
+    },
+    {
+      "id": 3,
+      "question": "排序融合+访问反馈+时间衰减(P2)本期做不做?",
+      "resolution": "做,与 FR-5 同批",
+      "status": "closed"
+    },
+    {
+      "id": 4,
+      "question": "写入侧收紧:低置信/低重要性记忆提取结果不落库,宁可漏存(库干净)还是宁可多存(不丢信息)?",
+      "resolution": "宁缺毋滥: confidence<0.6 或 importance<4 不入库",
+      "status": "closed"
+    },
+    {
+      "id": 5,
+      "question": "验收评测方式:自动评测脚本(golden set ~30条)还是仅人工抽查?",
+      "resolution": "自动评测脚本 golden set ~30条",
+      "status": "closed"
+    }
+  ],
+  "modules": [],
+  "steps": [],
+  "requirements_version": 1,
+  "change_count": 0,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "切换嵌入模型致向量维度变化,存量向量全部失效;重建过程失败/超时会留下半重建状态(即当前 9/24 缺口的根因)",
+      "prob": "中",
+      "impact": "高",
+      "mitigation": "重建改为原子化(先写临时集合成功后原子替换)或对账自愈+断点续跑;切换前自动备份",
+      "status": "open"
+    },
+    {
+      "id": "R-2",
+      "desc": "相似度阈值过高导致真正相关的长尾查询被过滤,召回率反降",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "阈值进 config 可调;以评测集 hit@k 数据定阈值而非拍脑袋",
+      "status": "open"
+    },
+    {
+      "id": "R-3",
+      "desc": "单元测试环境无 Ollama/嵌入服务(沿用既有 mock 约定),而评测指标依赖实机",
+      "prob": "高",
+      "impact": "中",
+      "mitigation": "单测全 mock;评测脚本实机单独跑并在 AC 中区分两类验证",
+      "status": "open"
+    },
+    {
+      "id": "R-4",
+      "desc": "访问反馈排序造成富者愈富:冷启动/低频记忆永无出头之日",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "反馈权重γ设小并加探索项;时间衰减不惩罚从未被访问的记忆",
+      "status": "open"
+    },
+    {
+      "id": "R-5",
+      "desc": "FTS5/rank_bm25 依赖不可用或对中文分词效果差(中文无空格分词)",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "优先 FTS5 trigram;不可用则 BM25 通道自动禁用退回纯向量",
+      "status": "open"
+    },
+    {
+      "id": "R-6",
+      "desc": "golden set 规模小(~30条),指标噪声大,可能误导调参",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "指标只作相对对比不作绝对达标线;覆盖6类记忆各≥4条",
+      "status": "open"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-06T15:55:00+08:00"
+}

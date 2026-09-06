@@ -28,12 +28,16 @@ class TestStockDetect:
         assert not is_stock_query("今天有什么新闻")
 
     def test_to_symbols(self):
-        assert _to_symbols("阿里巴巴BABA今天股价") == ["usBABA"]
+        assert _to_symbols("阿里巴巴BABA今天股价") == ["usBABA", "hk09988"]  # 中文名映射同时带上港股
         assert _to_symbols("09988股价") == ["hk09988"]
         assert _to_symbols("600519茅台股价") == ["sh600519"]
         assert _to_symbols("000001股价") == ["sz000001"]
-        # 纯中文公司名不提取（回退普通搜索）
-        assert _to_symbols("阿里巴巴的股价") == []
+        # 中文名映射优先
+        assert _to_symbols("阿里巴巴股价多少") == ["usBABA", "hk09988"]
+        assert "hk00700" in _to_symbols("腾讯股价")
+        assert "usNVDA" in _to_symbols("英伟达市值")
+        # 中文名+代码同时出现不重复（美股优先排前）
+        assert _to_symbols("阿里巴巴BABA股价") == ["usBABA", "hk09988"]
         # API/AI 等噪音词不算代码
         assert _to_symbols("API的AI股价") == []
 

@@ -19,6 +19,39 @@ _TIMEOUT = 8
 _STOCK_SUFFIXES = ["股价", "股票", "行情", "收盘价", "开盘价", "涨了", "跌了", "市值",
                    "走势", "多少钱", "什么价"]
 
+# 常见中文名 → 腾讯代码（中文问法不带代码时的兜底映射）
+NAME_SYMBOLS = {
+    "阿里巴巴": ["usBABA", "hk09988"],
+    "腾讯": ["hk00700", "usTCEHY"],
+    "英伟达": ["usNVDA"],
+    "特斯拉": ["usTSLA"],
+    "苹果": ["usAAPL"],
+    "微软": ["usMSFT"],
+    "谷歌": ["usGOOGL"],
+    "亚马逊": ["usAMZN"],
+    "Meta": ["usMETA"],
+    "facebook": ["usMETA"],
+    "台积电": ["usTSM"],
+    "AMD": ["usAMD"],
+    "贵州茅台": ["sh600519"],
+    "茅台": ["sh600519"],
+    "宁德时代": ["sz300750"],
+    "比亚迪": ["sz002594", "hk01211"],
+    "小米": ["hk01810"],
+    "美团": ["hk03690"],
+    "京东": ["usJD", "hk09618"],
+    "百度": ["usBIDU", "hk09888"],
+    "网易": ["usNTES", "hk09999"],
+    "拼多多": ["usPDD"],
+    "顺丰": ["sz002352"],
+    "工商银行": ["sh601398"],
+    "建设银行": ["sh601939"],
+    "中国石油": ["sh601857"],
+    "中国移动": ["sh600941", "hk00941"],
+    "中芯国际": ["sh688981", "hk00981"],
+    "寒武纪": ["sh688256"],
+}
+
 
 def is_stock_query(query: str) -> bool:
     return any(s in query for s in _STOCK_SUFFIXES)
@@ -27,10 +60,16 @@ def is_stock_query(query: str) -> bool:
 def _to_symbols(query: str) -> List[str]:
     """从问题提取腾讯格式代码：BABA→usBABA，09988→hk09988，600519→sh600519。
 
+    优先匹配知名公司中文名；再用正则提取裸代码/数字。
     注意：汉字也是 \w，不能用 \b 做英文边界；用"相邻不是同类字符"的显式断言。
     """
     symbols: List[str] = []
-    for code in re.findall(r"(?<![A-Za-z])([A-Za-z]{1,5})(?![A-Za-z])", query):
+    rest = query
+    for name, codes in NAME_SYMBOLS.items():
+        if name and name in rest:
+            symbols.extend(codes)
+            rest = rest.replace(name, "")
+    for code in re.findall(r"(?<![A-Za-z])([A-Za-z]{1,5})(?![A-Za-z])", rest):
         up = code.upper()
         if up in {"API", "AI", "IPO", "CEO", "CFO", "ETF", "USD", "RMB", "APP",
                   "THE", "A", "B"}:
@@ -43,7 +82,8 @@ def _to_symbols(query: str) -> List[str]:
             symbols.append(f"sh{code}")
         else:
             symbols.append(f"sz{code}")
-    return symbols[:4]
+    ordered = list(dict.fromkeys(symbols))
+    return ordered[:4]
 
 
 def _fetch_tencent(symbols: List[str]) -> List[Dict]:

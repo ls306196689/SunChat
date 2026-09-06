@@ -134,6 +134,35 @@ class TestProcessMessageOptimization:
         assert result["sources"] == []
         assert CALLS["chat"] == 1
 
+    def test_stock_price_direct_quote(self, service, monkeypatch):
+        """股价问题(不带代码的中文名) → 行情数字直接进 system, sources 含腾讯行情"""
+        class Resp:
+            text = ('v_usBABA="200~阿里巴巴~BABA.N~113.24~111.81~112.37~7182522~0~0~'
+                    '113.01~100~0~0~0~0~0~0~0~0~113.18~100~0~0~0~0~0~0~0~0~~'
+                    '2026-09-04 16:04:38~1.43~1.28~113.41~111.97~USD~7182522~'
+                    + "810867596~0.29~25.89~~17.76~1:8~1.29~2765.24284~2814.72018~"
+                    + "Alibaba Group Holding Ltd~" + "~".join(["0"] * 30) + '";')
+            encoding = "gbk"
+        import core.stock as stock_mod
+        monkeypatch.setattr(stock_mod.requests, "get", lambda *a, **kw: Resp())
+
+        uid = 5112
+        sid = self._session(service, uid)
+        result = service.process_message(
+            user_id=uid, session_id=sid, content="阿里巴巴股价多少",
+            memory_enabled=False, search_enabled=True)
+        system = next(m["content"] for m in LAST_CHAT_PAYLOADS[-1]["messages"]
+                      if m["role"] == "system")
+        assert "113.24" in system
+        assert "实时行情" in system
+        assert any(s["source"] == "tencent-quote" for s in result["sources"])
+
+    def test_stock_route_matches_search_tool(self):
+        """"股价"类查询路由到 search 工具（不再漏判为闲聊）"""
+        from core.chat_router import chat_router
+        assert chat_router.route("阿里巴巴股价多少")["tool"] == "search"
+        assert chat_router.route("英伟达今天涨了还是跌了")["tool"] == "search"
+
     def test_real_tokens_used(self, service):
         """eval_count 真实值写入返回与 Message.tokens_used"""
         uid = 5106

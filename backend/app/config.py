@@ -19,9 +19,9 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "qwen2.5:7b"
     LLM_TIMEOUT: int = 300  # LLM 请求超时（秒），本地生成较慢
 
-    # 嵌入模型配置
+    # 嵌入模型配置（bge-m3: 中文语义优于 nomic-embed-text, 决策 D-001;切换后需重建向量库）
     EMBEDDING_API_URL: str = "http://localhost:11434"
-    EMBEDDING_MODEL: str = "nomic-embed-text"
+    EMBEDDING_MODEL: str = "bge-m3"
 
     # 模型管理配置
     MODEL_CONFIG_PATH: str = str(DATA_DIR / "model_config.json")  # 运行时模型选择持久化（绝对路径）
@@ -55,6 +55,22 @@ class Settings(BaseSettings):
     CHAT_HISTORY_MESSAGES: int = 6   # 多轮上下文携带的最近消息条数
     MEMORY_ROUTER_LLM_FALLBACK: bool = True  # 规则未命中且输入较长时才用 LLM 兜底分析
     MEMORY_ROUTER_LLM_MIN_LEN: int = 12  # 低于此长度的输入直接信任规则（问候语等 0 LLM）
+
+    # 记忆写入阈值（宁缺毋滥, 决策 D-004）
+    MEMORY_WRITE_MIN_CONFIDENCE: float = 0.6
+    MEMORY_WRITE_MIN_IMPORTANCE: int = 4
+
+    # 存储一致性
+    RECONCILE_ON_STARTUP: bool = True  # 启动时 SQLite↔Chroma 对账自愈
+
+    # 混合检索 / 排序融合（权重 α,β,γ,δ = 相似度,重要性,时间衰减,访问反馈）
+    MEMORY_VEC_TOPN: int = 10            # 向量通道召回数
+    MEMORY_FTS_TOPN: int = 10            # 关键词通道召回数
+    MEMORY_SIM_THRESHOLD: float = 0.3    # 注入前最低余弦相似度（保守起步, 评测定参）
+    MEMORY_FINAL_MIN_SCORE: float = 0.15
+    MEMORY_RANK_WEIGHTS: str = "0.7,0.15,0.1,0.05"
+    MEMORY_ACCESS_FEEDBACK: bool = True  # 命中注入后更新 access_count/accessed_at
+    MEMORY_INJECT_TOPK: int = 5          # 注入 system prompt 的记忆条数
 
     class Config:
         env_file = ".env"

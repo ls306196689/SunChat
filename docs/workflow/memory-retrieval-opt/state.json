@@ -1,6 +1,6 @@
 {
   "project": "memory-retrieval-opt",
-  "phase": "plan",
+  "phase": "execute",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -19,6 +19,12 @@
       "at": "2026-09-06T16:35:00+08:00",
       "confirmed_by": "user",
       "note": "5模块整批确认"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-06T18:20:00+08:00",
+      "confirmed_by": "user",
+      "note": "7步计划确认"
     }
   ],
   "clarifications": [
@@ -80,7 +86,57 @@
       "design_done": true
     }
   ],
-  "steps": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "环境:pull bge-m3+config阈值/权重项",
+      "module": "config",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 2,
+      "title": "FTS5索引模块+单测",
+      "module": "M2",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 3,
+      "title": "存储一致性 reconcile/rebuild/写阈值+单测",
+      "module": "M1",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 4,
+      "title": "ranking+混合检索search_memories升级+单测",
+      "module": "M3",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 5,
+      "title": "对话注入统一+删死代码+单测",
+      "module": "M4",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 6,
+      "title": "golden set+评测脚本+before/after报告",
+      "module": "M5",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 7,
+      "title": "实机接线验证+全量pytest",
+      "module": "集成",
+      "status": "pending",
+      "verified": false
+    }
+  ],
   "requirements_version": 1,
   "change_count": 0,
   "risks": [
@@ -140,5 +196,5 @@
     "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
     "push_pending": false
   },
-  "updated_at": "2026-09-06T16:35:00+08:00"
+  "updated_at": "2026-09-06T18:30:00+08:00"
 }

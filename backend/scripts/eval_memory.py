@@ -53,10 +53,12 @@ def cleanup_user(user_id: int) -> int:
     return len(ids)
 
 
-def setup_case(user_id: int, case: dict) -> None:
+def setup_case(base_user: int, case: dict, seq: int) -> int:
+    """每用例独立 user(隔离检索池, 避免共享池下互相干扰), 返回该用例的 user_id。"""
     from models.sql_models import get_thread_session, Memory
     from services.memory_service import memory_service
     db = get_thread_session()
+    case_user = base_user * 100 + seq
     for entry in case["setup"]:
         content, backdate = entry, 0
         if entry.endswith("|old"):
@@ -64,13 +66,19 @@ def setup_case(user_id: int, case: dict) -> None:
         elif entry.endswith("|new"):
             content = entry[:-4]
         r = memory_service.create_memory(
-            user_id=user_id, content=content,
+            user_id=case_user, content=content,
             category=case.get("category", "general"),
             importance=7, confidence=0.9)
         if backdate:
             row = db.query(Memory).filter_by(id=r["id"]).first()
             row.created_at = datetime.now() - timedelta(days=backdate)
             db.commit()
+    return case_user
+
+
+def cleanup_cases(base_user: int, n_cases: int) -> None:
+    for seq in range(1, n_cases + 1):
+        cleanup_user(base_user * 100 + seq)
 
 
 def run_eval(user_id: int, topk: int, quiet: bool = False):
@@ -81,13 +89,12 @@ def run_eval(user_id: int, topk: int, quiet: bool = False):
     forbid_cases = forbid_hits = 0
     per_case = []
 
-    for case in cases:
-        setup_case(user_id, case)
+    case_users = [setup_case(user_id, case, i + 1) for i, case in enumerate(cases)]
 
     # setup 后统一检索(避免边写边影响排名)
-    for case in cases:
+    for case, case_user in zip(cases, case_users):
         results = memory_service.search_memories(
-            user_id=user_id, query=case["query"], top_k=topk)
+            user_id=case_user, query=case["query"], top_k=topk)
         topk_contents = [r.get("content", "") for r in results]
         any_hit = any(any(w in c for w in case["expect_any"]) for c in topk_contents)
         hit_at1 = bool(topk_contents) and any(w in topk_contents[0] for w in case["expect_any"])
@@ -97,7 +104,8 @@ def run_eval(user_id: int, topk: int, quiet: bool = False):
         irrelevant = False
         if fb:
             forbid_cases += 1
-            irrelevant = any(any(w in c for w in fb) for c in topk_contents)
+            scope = topk_contents[:1] if case.get("forbid_scope") == "top1" else topk_contents
+            irrelevant = any(any(w in c for w in fb) for c in scope)
             forbid_hits += irrelevant
         per_case.append({"id": case["id"], "query": case["query"],
                          "hit": any_hit, "hit@1": hit_at1,
@@ -136,7 +144,13 @@ def main():
         print(f"[eval] removed {cleanup_user(args.user)} memories of user {args.user}")
         return
 
-    # 评测前就绪 FTS(after 树) / 忽略不可用(before 树无此模块)
+    # 评测前就绪: 建目录/建表(新树 init_db 含 FTS) + FTS bootstrap(before 旧树无该模块自动跳过)
+    os.makedirs(os.path.join(BACKEND_DIR, "data"), exist_ok=True)
+    try:
+        from models.sql_models import init_db
+        init_db()
+    except Exception:
+        pass
     try:
         from core import fts_index
         if fts_index.init_fts():

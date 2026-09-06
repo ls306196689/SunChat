@@ -126,8 +126,8 @@
       "id": 6,
       "title": "golden set+评测脚本+before/after报告",
       "module": "M5",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 7,
@@ -196,5 +196,5 @@
     "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
     "push_pending": false
   },
-  "updated_at": "2026-09-06T19:25:00+08:00"
+  "updated_at": "2026-09-06T20:40:00+08:00"
 }

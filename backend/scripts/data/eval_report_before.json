@@ -1,9 +1,9 @@
 {
-  "run_at": "2026-09-06T20:32:20.191167",
+  "run_at": "2026-09-06T20:32:22.038089",
   "n": 47,
-  "hit@1": 1.0,
+  "hit@1": 0.9787,
   "hit@3": 1.0,
-  "irrelevant_injection_rate": 0.3333,
+  "irrelevant_injection_rate": 0.6667,
   "topk": 3,
   "per_case": [
     {
@@ -333,20 +333,21 @@
       "query": "凤凰计划 是什么",
       "hit": true,
       "hit@1": true,
-      "irrelevant": false,
+      "irrelevant": true,
       "topk": [
-        "用户的秘密项目代号叫凤凰计划B2"
+        "用户的秘密项目代号叫凤凰计划B2",
+        "用户爱喝可乐"
       ]
     },
     {
       "id": "t1",
       "query": "我现在支持哪支球队",
       "hit": true,
-      "hit@1": true,
-      "irrelevant": false,
+      "hit@1": false,
+      "irrelevant": true,
       "topk": [
-        "用户最近改支持勇士队了",
-        "用户很早以前支持的球队是湖人队"
+        "用户很早以前支持的球队是湖人队",
+        "用户最近改支持勇士队了"
       ]
     },
     {

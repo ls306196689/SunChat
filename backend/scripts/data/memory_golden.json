@@ -1,44 +1,596 @@
 [
-  {"id": "p1", "group": "person", "category": "person", "setup": ["用户叫王大锤"], "query": "我叫什么名字", "expect_any": ["王大锤"], "forbid_in_topk": ["咖啡"]},
-  {"id": "p2", "group": "person", "category": "person", "setup": ["用户是一名后端工程师"], "query": "我是做什么工作的", "expect_any": ["后端工程师"]},
-  {"id": "p3", "group": "person", "category": "person", "setup": ["用户住在成都高新区"], "query": "我现在住在哪个城市", "expect_any": ["成都"]},
-  {"id": "p4", "group": "person", "category": "person", "setup": ["用户今年28岁"], "query": "我多大年纪", "expect_any": ["28"]},
-  {"id": "p5", "group": "person", "category": "person", "setup": ["用户是左撇子"], "query": "我用哪只手写字吃饭", "expect_any": ["左撇子"]},
-
-  {"id": "r1", "group": "preference", "category": "preference", "setup": ["用户喜欢喝美式咖啡不加糖"], "query": "我喜欢喝什么咖啡", "expect_any": ["美式咖啡"]},
-  {"id": "r2", "group": "preference", "category": "preference", "setup": ["用户最喜欢的颜色是深蓝色"], "query": "我最喜欢什么颜色", "expect_any": ["深蓝"]},
-  {"id": "r3", "group": "preference", "category": "preference", "setup": ["用户讨厌吃香菜"], "query": "我讨厌什么蔬菜", "expect_any": ["香菜"]},
-  {"id": "r4", "group": "preference", "category": "preference", "setup": ["用户喜欢听摇滚乐"], "query": "我爱听什么类型的音乐", "expect_any": ["摇滚"]},
-  {"id": "r5", "group": "preference", "category": "preference", "setup": ["用户乘机偏好坐窗边的座位"], "query": "坐飞机我喜欢什么位置", "expect_any": ["窗边"]},
-
-  {"id": "e1", "group": "event", "category": "event", "setup": ["用户上周去了青岛出差"], "query": "我上周去哪里出差了", "expect_any": ["青岛"]},
-  {"id": "e2", "group": "event", "category": "event", "setup": ["用户昨天看完了电影星际穿越"], "query": "我昨天看完的那部电影叫什么", "expect_any": ["星际穿越"]},
-  {"id": "e3", "group": "event", "category": "event", "setup": ["用户上个月参加了大学同学聚会"], "query": "我上个月参加了什么活动", "expect_any": ["同学聚会"]},
-  {"id": "e4", "group": "event", "category": "event", "setup": ["用户前天在地铁上丢了雨伞"], "query": "我前天丢了什么东西", "expect_any": ["雨伞"]},
-  {"id": "e5", "group": "event", "category": "event", "setup": ["用户去年六月从四川大学毕业"], "query": "我什么时候毕业的", "expect_any": ["毕业"]},
-
-  {"id": "k1", "group": "knowledge", "category": "knowledge", "setup": ["用户说过 Python 的 GIL 是全局解释器锁"], "query": "GIL 是什么", "expect_any": ["GIL"]},
-  {"id": "k2", "group": "knowledge", "category": "knowledge", "setup": ["用户提到项目里用 Redis 做缓存层"], "query": "我的项目里缓存用的什么", "expect_any": ["Redis", "redis"]},
-  {"id": "k3", "group": "knowledge", "category": "knowledge", "setup": ["用户知道 HTTP 状态码 404 表示资源未找到"], "query": "404 状态码是什么意思", "expect_any": ["404"]},
-  {"id": "k4", "group": "knowledge", "category": "knowledge", "setup": ["用户说过 SQLite 自带 FTS5 全文索引模块"], "query": "SQLite 的全文搜索模块叫什么", "expect_any": ["FTS5"]},
-  {"id": "k5", "group": "knowledge", "category": "knowledge", "setup": ["用户了解 RRF 是一种多通道排序融合算法"], "query": "RRF 是干什么的算法", "expect_any": ["RRF"]},
-
-  {"id": "h1", "group": "relationship", "category": "relationship", "setup": ["用户最好的朋友叫李建国"], "query": "我最好的朋友叫什么", "expect_any": ["李建国"]},
-  {"id": "h2", "group": "relationship", "category": "relationship", "setup": ["用户的研究生导师是陈志远教授"], "query": "我的研究生导师是谁", "expect_any": ["陈志远"]},
-  {"id": "h3", "group": "relationship", "category": "relationship", "setup": ["用户的同事王芳负责前端开发"], "query": "组里谁负责前端", "expect_any": ["王芳"]},
-  {"id": "h4", "group": "relationship", "category": "relationship", "setup": ["用户的妈妈喜欢跳广场舞"], "query": "我妈有什么爱好", "expect_any": ["广场舞"]},
-  {"id": "h5", "group": "relationship", "category": "relationship", "setup": ["用户的大学室友叫赵磊现在在上海"], "query": "我大学室友现在在哪座城市", "expect_any": ["赵磊"]},
-
-  {"id": "b1", "group": "habit", "category": "habit", "setup": ["用户习惯每天早上七点起床晨跑"], "query": "我每天早上几点起床", "expect_any": ["七点"]},
-  {"id": "b2", "group": "habit", "category": "habit", "setup": ["用户每晚睡前看书半小时"], "query": "我睡前有什么习惯", "expect_any": ["看书"]},
-  {"id": "b3", "group": "habit", "category": "habit", "setup": ["用户每周三晚上去健身房撸铁"], "query": "我每周几去健身房", "expect_any": ["周三"]},
-  {"id": "b4", "group": "habit", "category": "habit", "setup": ["用户工作习惯用番茄工作法管理时间"], "query": "我工作用什么时间管理方法", "expect_any": ["番茄工作法"]},
-  {"id": "b5", "group": "habit", "category": "habit", "setup": ["用户给自己定了每天喝八杯水的目标"], "query": "我每天要喝几杯水", "expect_any": ["八杯"]},
-
-  {"id": "n1", "group": "special", "category": "knowledge", "setup": ["用户查询过股票代码600519贵州茅台的股价走势", "用户爱喝可乐"], "query": "600519", "expect_any": ["茅台"], "forbid_in_topk": ["可乐"]},
-  {"id": "n2", "group": "special", "category": "event", "setup": ["用户下周三下午三点有产品评审会", "用户爱喝可乐"], "query": "我下周三下午有什么安排", "expect_any": ["评审会", "产品评审"], "forbid_in_topk": ["可乐"]},
-  {"id": "n3", "group": "special", "category": "event", "setup": ["用户的秘密项目代号叫凤凰计划B2", "用户爱喝可乐"], "query": "凤凰计划 是什么", "expect_any": ["凤凰计划B2"], "forbid_in_topk": ["可乐"]},
-
-  {"id": "t1", "group": "time", "category": "preference", "setup": ["用户很早以前支持的球队是湖人队|old", "用户最近改支持勇士队了|new"], "query": "我现在支持哪支球队", "expect_any": ["勇士"], "forbid_in_topk": ["湖人"]},
-  {"id": "t2", "group": "time", "category": "knowledge", "setup": ["用户旧项目用的是 Vue2|old", "用户最近在学 Vue3 组合式 API|new"], "query": "我现在在学什么前端框架", "expect_any": ["Vue3"], "forbid_in_topk": ["Vue2"]}
+ {
+  "id": "p1",
+  "group": "person",
+  "category": "person",
+  "setup": [
+   "用户叫王大锤"
+  ],
+  "query": "我叫什么名字",
+  "expect_any": [
+   "王大锤"
+  ],
+  "forbid_in_topk": [
+   "咖啡"
+  ]
+ },
+ {
+  "id": "p2",
+  "group": "person",
+  "category": "person",
+  "setup": [
+   "用户是一名后端工程师"
+  ],
+  "query": "我是做什么工作的",
+  "expect_any": [
+   "后端工程师"
+  ]
+ },
+ {
+  "id": "p3",
+  "group": "person",
+  "category": "person",
+  "setup": [
+   "用户住在成都高新区"
+  ],
+  "query": "我现在住在哪个城市",
+  "expect_any": [
+   "成都"
+  ]
+ },
+ {
+  "id": "p4",
+  "group": "person",
+  "category": "person",
+  "setup": [
+   "用户今年28岁"
+  ],
+  "query": "我多大年纪",
+  "expect_any": [
+   "28"
+  ]
+ },
+ {
+  "id": "p5",
+  "group": "person",
+  "category": "person",
+  "setup": [
+   "用户是左撇子"
+  ],
+  "query": "我用哪只手写字吃饭",
+  "expect_any": [
+   "左撇子"
+  ]
+ },
+ {
+  "id": "r1",
+  "group": "preference",
+  "category": "preference",
+  "setup": [
+   "用户喜欢喝美式咖啡不加糖"
+  ],
+  "query": "我喜欢喝什么咖啡",
+  "expect_any": [
+   "美式咖啡"
+  ]
+ },
+ {
+  "id": "r2",
+  "group": "preference",
+  "category": "preference",
+  "setup": [
+   "用户最喜欢的颜色是深蓝色"
+  ],
+  "query": "我最喜欢什么颜色",
+  "expect_any": [
+   "深蓝"
+  ]
+ },
+ {
+  "id": "r3",
+  "group": "preference",
+  "category": "preference",
+  "setup": [
+   "用户讨厌吃香菜"
+  ],
+  "query": "我讨厌什么蔬菜",
+  "expect_any": [
+   "香菜"
+  ]
+ },
+ {
+  "id": "r4",
+  "group": "preference",
+  "category": "preference",
+  "setup": [
+   "用户喜欢听摇滚乐"
+  ],
+  "query": "我爱听什么类型的音乐",
+  "expect_any": [
+   "摇滚"
+  ]
+ },
+ {
+  "id": "r5",
+  "group": "preference",
+  "category": "preference",
+  "setup": [
+   "用户乘机偏好坐窗边的座位"
+  ],
+  "query": "坐飞机我喜欢什么位置",
+  "expect_any": [
+   "窗边"
+  ]
+ },
+ {
+  "id": "e1",
+  "group": "event",
+  "category": "event",
+  "setup": [
+   "用户上周去了青岛出差"
+  ],
+  "query": "我上周去哪里出差了",
+  "expect_any": [
+   "青岛"
+  ]
+ },
+ {
+  "id": "e2",
+  "group": "event",
+  "category": "event",
+  "setup": [
+   "用户昨天看完了电影星际穿越"
+  ],
+  "query": "我昨天看完的那部电影叫什么",
+  "expect_any": [
+   "星际穿越"
+  ]
+ },
+ {
+  "id": "e3",
+  "group": "event",
+  "category": "event",
+  "setup": [
+   "用户上个月参加了大学同学聚会"
+  ],
+  "query": "我上个月参加了什么活动",
+  "expect_any": [
+   "同学聚会"
+  ]
+ },
+ {
+  "id": "e4",
+  "group": "event",
+  "category": "event",
+  "setup": [
+   "用户前天在地铁上丢了雨伞"
+  ],
+  "query": "我前天丢了什么东西",
+  "expect_any": [
+   "雨伞"
+  ]
+ },
+ {
+  "id": "e5",
+  "group": "event",
+  "category": "event",
+  "setup": [
+   "用户去年六月从四川大学毕业"
+  ],
+  "query": "我什么时候毕业的",
+  "expect_any": [
+   "毕业"
+  ]
+ },
+ {
+  "id": "k1",
+  "group": "knowledge",
+  "category": "knowledge",
+  "setup": [
+   "用户说过 Python 的 GIL 是全局解释器锁"
+  ],
+  "query": "GIL 是什么",
+  "expect_any": [
+   "GIL"
+  ]
+ },
+ {
+  "id": "k2",
+  "group": "knowledge",
+  "category": "knowledge",
+  "setup": [
+   "用户提到项目里用 Redis 做缓存层"
+  ],
+  "query": "我的项目里缓存用的什么",
+  "expect_any": [
+   "Redis",
+   "redis"
+  ]
+ },
+ {
+  "id": "k3",
+  "group": "knowledge",
+  "category": "knowledge",
+  "setup": [
+   "用户知道 HTTP 状态码 404 表示资源未找到"
+  ],
+  "query": "404 状态码是什么意思",
+  "expect_any": [
+   "404"
+  ]
+ },
+ {
+  "id": "k4",
+  "group": "knowledge",
+  "category": "knowledge",
+  "setup": [
+   "用户说过 SQLite 自带 FTS5 全文索引模块"
+  ],
+  "query": "SQLite 的全文搜索模块叫什么",
+  "expect_any": [
+   "FTS5"
+  ]
+ },
+ {
+  "id": "k5",
+  "group": "knowledge",
+  "category": "knowledge",
+  "setup": [
+   "用户了解 RRF 是一种多通道排序融合算法"
+  ],
+  "query": "RRF 是干什么的算法",
+  "expect_any": [
+   "RRF"
+  ]
+ },
+ {
+  "id": "h1",
+  "group": "relationship",
+  "category": "relationship",
+  "setup": [
+   "用户最好的朋友叫李建国"
+  ],
+  "query": "我最好的朋友叫什么",
+  "expect_any": [
+   "李建国"
+  ]
+ },
+ {
+  "id": "h2",
+  "group": "relationship",
+  "category": "relationship",
+  "setup": [
+   "用户的研究生导师是陈志远教授"
+  ],
+  "query": "我的研究生导师是谁",
+  "expect_any": [
+   "陈志远"
+  ]
+ },
+ {
+  "id": "h3",
+  "group": "relationship",
+  "category": "relationship",
+  "setup": [
+   "用户的同事王芳负责前端开发"
+  ],
+  "query": "组里谁负责前端",
+  "expect_any": [
+   "王芳"
+  ]
+ },
+ {
+  "id": "h4",
+  "group": "relationship",
+  "category": "relationship",
+  "setup": [
+   "用户的妈妈喜欢跳广场舞"
+  ],
+  "query": "我妈有什么爱好",
+  "expect_any": [
+   "广场舞"
+  ]
+ },
+ {
+  "id": "h5",
+  "group": "relationship",
+  "category": "relationship",
+  "setup": [
+   "用户的大学室友叫赵磊现在在上海"
+  ],
+  "query": "我大学室友现在在哪座城市",
+  "expect_any": [
+   "赵磊"
+  ]
+ },
+ {
+  "id": "b1",
+  "group": "habit",
+  "category": "habit",
+  "setup": [
+   "用户习惯每天早上七点起床晨跑"
+  ],
+  "query": "我每天早上几点起床",
+  "expect_any": [
+   "七点"
+  ]
+ },
+ {
+  "id": "b2",
+  "group": "habit",
+  "category": "habit",
+  "setup": [
+   "用户每晚睡前看书半小时"
+  ],
+  "query": "我睡前有什么习惯",
+  "expect_any": [
+   "看书"
+  ]
+ },
+ {
+  "id": "b3",
+  "group": "habit",
+  "category": "habit",
+  "setup": [
+   "用户每周三晚上去健身房撸铁"
+  ],
+  "query": "我每周几去健身房",
+  "expect_any": [
+   "周三"
+  ]
+ },
+ {
+  "id": "b4",
+  "group": "habit",
+  "category": "habit",
+  "setup": [
+   "用户工作习惯用番茄工作法管理时间"
+  ],
+  "query": "我工作用什么时间管理方法",
+  "expect_any": [
+   "番茄工作法"
+  ]
+ },
+ {
+  "id": "b5",
+  "group": "habit",
+  "category": "habit",
+  "setup": [
+   "用户给自己定了每天喝八杯水的目标"
+  ],
+  "query": "我每天要喝几杯水",
+  "expect_any": [
+   "八杯"
+  ]
+ },
+ {
+  "id": "n1",
+  "group": "special",
+  "category": "knowledge",
+  "setup": [
+   "用户查询过股票代码600519贵州茅台的股价走势",
+   "用户爱喝可乐"
+  ],
+  "query": "600519",
+  "expect_any": [
+   "茅台"
+  ],
+  "forbid_in_topk": [
+   "可乐"
+  ]
+ },
+ {
+  "id": "n2",
+  "group": "special",
+  "category": "event",
+  "setup": [
+   "用户下周三下午三点有产品评审会",
+   "用户爱喝可乐"
+  ],
+  "query": "我下周三下午有什么安排",
+  "expect_any": [
+   "评审会",
+   "产品评审"
+  ],
+  "forbid_in_topk": [
+   "可乐"
+  ]
+ },
+ {
+  "id": "n3",
+  "group": "special",
+  "category": "event",
+  "setup": [
+   "用户的秘密项目代号叫凤凰计划B2",
+   "用户爱喝可乐"
+  ],
+  "query": "凤凰计划 是什么",
+  "expect_any": [
+   "凤凰计划B2"
+  ],
+  "forbid_in_topk": [
+   "可乐"
+  ]
+ },
+ {
+  "id": "t1",
+  "group": "time",
+  "category": "preference",
+  "setup": [
+   "用户很早以前支持的球队是湖人队|old",
+   "用户最近改支持勇士队了|new"
+  ],
+  "query": "我现在支持哪支球队",
+  "expect_any": [
+   "勇士"
+  ],
+  "forbid_in_topk": [
+   "湖人"
+  ],
+  "forbid_scope": "top1"
+ },
+ {
+  "id": "t2",
+  "group": "time",
+  "category": "knowledge",
+  "setup": [
+   "用户旧项目用的是 Vue2|old",
+   "用户最近在学 Vue3 组合式 API|new"
+  ],
+  "query": "我现在在学什么前端框架",
+  "expect_any": [
+   "Vue3"
+  ],
+  "forbid_in_topk": [
+   "Vue2"
+  ],
+  "forbid_scope": "top1"
+ },
+ {
+  "id": "w1",
+  "group": "paraphrase",
+  "category": "person",
+  "setup": [
+   "用户叫孙鹏飞"
+  ],
+  "query": "之前跟你提过该怎么称呼我来着",
+  "expect_any": [
+   "孙鹏飞"
+  ]
+ },
+ {
+  "id": "w2",
+  "group": "paraphrase",
+  "category": "preference",
+  "setup": [
+   "用户特别喜欢喝咖啡，尤其是美式"
+  ],
+  "query": "咖啡店点单给我推荐个最合我口味的",
+  "expect_any": [
+   "美式"
+  ]
+ },
+ {
+  "id": "w3",
+  "group": "paraphrase",
+  "category": "event",
+  "setup": [
+   "我在2024年参加过半程马拉松，配速约5分20秒/公里"
+  ],
+  "query": "我以前长跑的成绩大概是什么水平",
+  "expect_any": [
+   "马拉松",
+   "5分20"
+  ]
+ },
+ {
+  "id": "w4",
+  "group": "paraphrase",
+  "category": "preference",
+  "setup": [
+   "用户讨厌吃香菜"
+  ],
+  "query": "我点餐的时候有什么绝对不能放的配料",
+  "expect_any": [
+   "香菜"
+  ]
+ },
+ {
+  "id": "w5",
+  "group": "paraphrase",
+  "category": "relationship",
+  "setup": [
+   "用户最好的朋友叫李建国"
+  ],
+  "query": "我铁哥们儿是叫啥来着",
+  "expect_any": [
+   "李建国"
+  ]
+ },
+ {
+  "id": "w6",
+  "group": "paraphrase",
+  "category": "habit",
+  "setup": [
+   "用户习惯每天早上七点起床晨跑"
+  ],
+  "query": "我早晨的作息规律是什么样的",
+  "expect_any": [
+   "七点",
+   "晨跑"
+  ]
+ },
+ {
+  "id": "w7",
+  "group": "paraphrase",
+  "category": "knowledge",
+  "setup": [
+   "用户项目里 Redis 被用作缓存层"
+  ],
+  "query": "我们系统里哪块组件承担了临时数据存储",
+  "expect_any": [
+   "Redis",
+   "redis"
+  ]
+ },
+ {
+  "id": "w8",
+  "group": "paraphrase",
+  "category": "event",
+  "setup": [
+   "用户上个月参加了大学同学聚会"
+  ],
+  "query": "我前阵子跟人聚餐是什么名目的活动",
+  "expect_any": [
+   "同学聚会"
+  ]
+ },
+ {
+  "id": "w9",
+  "group": "paraphrase",
+  "category": "preference",
+  "setup": [
+   "用户最喜欢的颜色是深蓝色"
+  ],
+  "query": "给我挑个主色调，按我的品位来",
+  "expect_any": [
+   "深蓝"
+  ]
+ },
+ {
+  "id": "w10",
+  "group": "paraphrase",
+  "category": "knowledge",
+  "setup": [
+   "用户的秘密项目代号叫凤凰计划B2"
+  ],
+  "query": "我那个不能外传的代号是什么行动",
+  "expect_any": [
+   "凤凰计划"
+  ]
+ },
+ {
+  "id": "w11",
+  "group": "paraphrase",
+  "category": "person",
+  "setup": [
+   "用户是一名后端工程师"
+  ],
+  "query": "我靠什么手艺吃饭的",
+  "expect_any": [
+   "后端"
+  ]
+ },
+ {
+  "id": "w12",
+  "group": "paraphrase",
+  "category": "habit",
+  "setup": [
+   "用户工作习惯用番茄工作法管理时间"
+  ],
+  "query": "我平时靠什么套路安排专注时段",
+  "expect_any": [
+   "番茄"
+  ]
+ }
 ]

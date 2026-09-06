@@ -11,6 +11,7 @@ from core.embedding import embedding_service
 from core.llm import ollama_service
 from core.memory_router import memory_router
 from core.model_manager import model_manager
+from core import ranking as ranking_mod
 from models.sql_models import DBSessionMixin, Memory, Emotion
 from models.schemas import MemoryCreate, MemoryUpdate
 from utils.logger import memory_logger, logger
@@ -216,18 +217,27 @@ class MemoryService(DBSessionMixin):
         user_id: int,
         query: str,
         top_k: int = 5,
-        filters: Dict = None
+        filters: Dict = None,
+        keywords: List[str] = None
     ) -> List[Dict]:
-        """搜索记忆（使用 Chroma 向量检索 + SQLite 元数据过滤）"""
+        """混合检索：Chroma 向量 + FTS5 关键词双通道召回 → RRF 融合 → 业务重排。
+
+        返回结构向后兼容(memory_id/content/similarity/metadata), 新增:
+          final_score: 融合排序分; channels: 命中的通道列表。
+        向量通道故障时自动降级 FTS + SQLite importance 关键词回退。
+        """
         logger.info(f"[MEMORY] 搜索记忆开始 - 用户:{user_id}, 查询:{query}, top_k:{top_k}")
-        results = []
+        sim_map: Dict[str, float] = {}
+        doc_map: Dict[str, Dict] = {}       # memory_id -> {content, metadata, similarity}
+        vec_ids: List[str] = []
+        vector_failed = False
 
         try:
-            # 生成查询向量
-            query_embedding = embedding_service.embed(query)
-            logger.debug(f"[MEMORY] 生成查询向量 - 维度:{len(query_embedding)}")
+            fused_query = query
+            if keywords:
+                fused_query = f"{query} {' '.join(keywords[:5])}" if query else " ".join(keywords[:5])
+            query_embedding = embedding_service.embed(fused_query)
 
-            # 构建 Chroma where 过滤（用户隔离必选，类型/分类可选）
             conditions = [{"user_id": user_id}]
             if filters:
                 if filters.get("type"):
@@ -236,71 +246,117 @@ class MemoryService(DBSessionMixin):
                     conditions.append({"category": filters["category"]})
             where_filter = conditions[0] if len(conditions) == 1 else {"$and": conditions}
 
-            # 使用 Chroma 进行向量相似度搜索（包含documents，where 保证用户隔离）
             chroma_results = self.chroma_client.query(
                 query_embeddings=[query_embedding],
-                n_results=top_k * 2,  # 获取更多结果以进行过滤
+                n_results=max(settings.MEMORY_VEC_TOPN, top_k * 2),
                 include=["documents", "metadatas", "distances"],
                 where=where_filter,
             )
 
-            logger.debug(f"[MEMORY] Chroma 查询完成 - 结果数:{len(chroma_results.get('ids', [[]])[0])}")
-
-            # 从 Chroma 结果中提取 IDs
             chroma_ids = chroma_results.get("ids", [[]])[0]
             chroma_distances = chroma_results.get("distances", [[]])[0]
             chroma_metadatas = chroma_results.get("metadatas", [[]])[0]
             chroma_documents = chroma_results.get("documents", [[]])[0]
 
-            logger.debug(f"[MEMORY] Chroma 结果详细 - IDs:{len(chroma_ids)}, Documents:{len(chroma_documents)}, Metadatas:{len(chroma_metadatas)}")
-
-            # 将 Chroma 结果转换为内存列表
-            for i, chroma_id in enumerate(chroma_ids):
-                # 优先从documents中获取内容，然后从metadata的document字段
-                if i < len(chroma_documents):
-                    content = chroma_documents[i]
-                else:
-                    metadata = chroma_metadatas[i] if i < len(chroma_metadatas) else {}
-                    content = metadata.get("document", "")
-
+            for i in range(len(chroma_ids)):
                 metadata = chroma_metadatas[i] if i < len(chroma_metadatas) else {}
-
-                # 应用 SQLite 元数据过滤
+                content = (chroma_documents[i] if i < len(chroma_documents)
+                           else metadata.get("document", ""))
                 if filters:
                     if filters.get("type") and metadata.get("type") != filters["type"]:
                         continue
                     if filters.get("category") and metadata.get("category") != filters["category"]:
                         continue
-
-                # 将余弦距离转换为相似度 (1 - distance)
                 distance = chroma_distances[i] if i < len(chroma_distances) else 0
-                similarity = max(0, 1 - distance)
-
-                logger.debug(f"[MEMORY]   Chroma结果{i+1}: content='{content[:50] if content else 'None'}...', similarity={similarity:.4f}")
-
-                results.append({
-                    # metadata 中记录了真实记忆 id（chroma_id 是向量 id，不能当记忆 id 用）
-                    "memory_id": metadata.get("memory_id", chroma_id),
-                    "content": content,
-                    "similarity": round(similarity, 4),
-                    "metadata": metadata,
-                })
-
-            # 如果 Chroma 没有结果，回退到 SQLite 关键词搜索
-            if not results:
-                sqlite_results = self._search_memories_sqlite(user_id, query, top_k, filters)
-                results.extend(sqlite_results)
-
+                mid = metadata.get("memory_id", chroma_ids[i])
+                sim_map[mid] = max(0.0, 1 - float(distance))
+                doc_map[mid] = {"content": content, "metadata": metadata}
+                vec_ids.append(mid)
         except Exception as e:
-            logger.error(f"[MEMORY] 向量搜索失败 - 错误:{e}")
-            # 如果向量搜索失败，回退到 SQLite 关键词搜索
+            vector_failed = True
+            logger.error(f"[MEMORY] 向量通道失败(降级 FTS+关键词回退) - 错误:{e}")
+
+        # FTS 关键词通道
+        fts_ids: List[str] = []
+        try:
+            from core.fts_index import fts_search
+            fts_full = query if not keywords else f"{query} {' '.join(keywords[:5])}"
+            fts_ids = [mid for mid, _ in fts_search(fts_full, user_id,
+                                                    n=settings.MEMORY_FTS_TOPN)]
+        except Exception as e:
+            logger.warning(f"[MEMORY] FTS 通道异常(忽略): {e}")
+
+        if not vec_ids and not fts_ids:
             results = self._search_memories_sqlite(user_id, query, top_k, filters)
+            logger.info(f"[MEMORY] 双通道无结果, SQLite importance 回退 - 结果数:{len(results)}")
+            return results
 
-        logger.info(f"[MEMORY] 搜索记忆完成 - 结果数:{len(results)}")
-        for i, r in enumerate(results[:3]):  # 只记录前3条
-            logger.debug(f"[MEMORY]   结果{i+1}: {r.get('content', '')[:50]}... (相似度: {r.get('similarity', 0):.4f})")
+        # RRF 融合 + SQLite 元数据补全
+        merged = ranking_mod.rrf_merge([l for l in (vec_ids, fts_ids) if l])
+        candidates = [mid for mid, _ in merged[:top_k * 3]]
+        rows = {}
+        if candidates:
+            mems = (self.db.query(Memory)
+                    .filter(Memory.id.in_(candidates), Memory.is_active == True)  # noqa: E712
+                    .all())
+            rows = {m.id: m for m in mems}
 
+        weight_map = dict(merged)
+        results: List[Dict] = []
+        for mid, _rrf in weight_map.items():
+            mem = rows.get(mid)
+            if mem is None:
+                continue
+            sim = sim_map.get(mid, 0.0)
+            channels = []
+            if mid in sim_map:
+                channels.append("vector")
+            if mid in fts_ids:
+                channels.append("fts")
+            # 阈值: 向量命中且低相似且无 FTS 佐证 → 剔除(R-2: 阈值起步保守)
+            if "vector" in channels and "fts" not in channels and sim < settings.MEMORY_SIM_THRESHOLD:
+                continue
+            age_days = ((datetime.now() - mem.created_at).total_seconds() / 86400.0
+                        if mem.created_at else 0.0)
+            fs = ranking_mod.final_score(sim, mem.importance or 5, age_days,
+                                         mem.access_count or 0)
+            if fs < settings.MEMORY_FINAL_MIN_SCORE:
+                continue
+            results.append({
+                "memory_id": mid,
+                "content": mem.content,
+                "similarity": round(sim, 4),
+                "final_score": round(fs, 4),
+                "channels": channels,
+                "metadata": doc_map.get(mid, {}).get("metadata") or {
+                    "type": mem.type, "category": mem.category or "general",
+                    "importance": mem.importance},
+            })
+
+        results.sort(key=lambda r: r["final_score"], reverse=True)
+        results = results[:top_k]
+
+        if settings.MEMORY_ACCESS_FEEDBACK and results:
+            self._touch_accessed([r["memory_id"] for r in results])
+
+        logger.info(f"[HYBRID] 检索完成 vec:{len(vec_ids)} fts:{len(fts_ids)} "
+                    f"注入:{len(results)} top1_score:"
+                    f"{results[0]['final_score'] if results else '-'}")
         return results
+
+    def _touch_accessed(self, memory_ids: List[str]) -> None:
+        """访问反馈: accessed_count+1, accessed_at=now(同步, 失败仅 DEBUG)。"""
+        try:
+            (self.db.query(Memory)
+                 .filter(Memory.id.in_(memory_ids))
+                 .update({Memory.access_count: Memory.access_count + 1,
+                          Memory.accessed_at: datetime.now()},
+                         synchronize_session=False))
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.debug(f"[MEMORY] 访问反馈更新失败(忽略): {e}")
+
 
     def _search_memories_sqlite(self, user_id: int, query: str, top_k: int, filters: Dict = None) -> List[Dict]:
         """SQLite 关键词搜索（作为回退方案）"""
@@ -510,26 +566,24 @@ class MemoryService(DBSessionMixin):
         Returns:
             记忆列表
         """
-        query_keywords = analysis_result.get("query_keywords", [])
-        memory_types = analysis_result.get("recommended_memory_types", [])
+        query_keywords = analysis_result.get("query_keywords", []) or []
 
-        # 构建查询文本
-        if query_keywords:
-            query_text = " ".join(query_keywords)
-        else:
-            query_text = analysis_result.get("user_input", "")
+        # FR-4: 原始用户输入为主查询串, keywords 仅作辅助(不再碎词拼接成唯一查询)
+        query_text = analysis_result.get("user_input", "")
 
-        logger.info(f"[MEMORY] 根据分析结果查询记忆 - 用户:{user_id}, 关键词:{query_keywords}, 类型:{memory_types}")
+        logger.info(f"[MEMORY] 根据分析结果查询记忆 - 用户:{user_id}, 关键词:{query_keywords}, "
+                    f"主查询:{query_text[:50]}")
 
         # 注意：不用 recommended_memory_types 做 category 过滤——
         # 提取侧落库的 category（general/preference/...）与路由推荐类型（person/event/...）
         # 是两套分类法，硬过滤会把正确结果清零（如"我叫什么"推荐 person，
-        # 但记忆存的是 general）。召回交给向量相似度 + 用户隔离。
+        # 但记忆存的是 general）。召回交给混合检索(向量+FTS)。
         results = self.search_memories(
             user_id=user_id,
             query=query_text,
             top_k=top_k,
-            filters=None
+            filters=None,
+            keywords=query_keywords,
         )
 
         logger.info(f"[MEMORY] 根据分析结果查询完成 - 结果数:{len(results)}")

@@ -20,92 +20,110 @@ def offline_network_guard():
     fakes.uninstall(patchers)
 
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_test_environment():
-    """Setup test environment before tests"""
+@pytest.fixture(scope="session", autouse=True)
+def global_test_env_isolation():
+    """会话级环境隔离：钉死测试环境变量（相对 ./data），禁止打生产库。
+    生产库防护另有 sql_models._guard_pytest_real_db 兜底。"""
     os.makedirs("./data", exist_ok=True)
-
-    # Clean up any existing test database
-    test_db_path = "./data/test_sunchat.db"
-    test_chroma_path = "./data/test_chroma"
-
-    if os.path.exists(test_db_path):
-        os.remove(test_db_path)
-
-    if os.path.exists(test_chroma_path):
-        shutil.rmtree(test_chroma_path)
-
-    # Mock environment variables
     with mock.patch.dict(os.environ, {
-        "DATABASE_URL": "sqlite:///./data/test_sunchat.db",
-        "CHROMA_PERSIST_DIR": "./data/test_chroma",
         "LLM_API_URL": "http://localhost:11434",
         "EMBEDDING_API_URL": "http://localhost:11434",
         "LLM_MODEL": "qwen2.5:7b",
-        "EMBEDDING_MODEL": "nomic-embed-text"
+        "EMBEDDING_MODEL": "nomic-embed-text",
     }):
-        # Reload config to pick up new environment variables
-        import importlib
-        import app.config
-        importlib.reload(app.config)
-
-        # Import after environment is set
-        from models.sql_models import init_db, reset_engine
-
-        # 重建 engine（删库后旧连接仍指向旧文件，必须 dispose 重建）
-        reset_engine()
-
-        # Initialize test database
-        init_db()
-
         yield
 
-    # Cleanup after all tests
-    if os.path.exists("./data/test_sunchat.db"):
-        os.remove("./data/test_sunchat.db")
 
-    if os.path.exists("./data/test_chroma"):
-        shutil.rmtree("./data/test_chroma")
+def _clear_chroma_cache():
+    try:
+        from chromadb.api.client import SharedSystemClient
+        SharedSystemClient.clear_system_cache()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="module", autouse=True)
+def module_isolated_env(request):
+    """每模块独立 DB + Chroma 目录。
+
+    - sqlite 删库会让另一模块持有的连接 unlink → 'readonly/unable to open';
+    - chromadb 按 path 全局缓存 system，跨模块删目录留下被 unlink 的陈旧句柄。
+    故每模块各用一套文件，并在切换前后清 chroma system 缓存。
+    该 autouse 早于模块内其它 fixture(含各自 init_db)，模块 fixture 无需再改环境变量。
+    历史事故：模块级同名 setup fixture 遮蔽 conftest 同名 fixture 导致打穿生产库，
+    因此本 fixture 专名 + sql_models 守卫 双保险。"""
+    import importlib
+    import app.config
+
+    mod = request.node.name.replace(".py", "") or "default"
+    chroma_path = f"./data/test_chroma_{mod}"
+    db_path = f"./data/test_sunchat_{mod}.db"
+
+    _clear_chroma_cache()
+    prev_db = os.environ.get("DATABASE_URL")
+    prev_chroma_env = os.environ.get("CHROMA_PERSIST_DIR")
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+    os.environ["CHROMA_PERSIST_DIR"] = chroma_path
+    importlib.reload(app.config)
+
+    for p in (chroma_path, db_path):
+        if os.path.isdir(p):
+            shutil.rmtree(p)
+        elif os.path.exists(p):
+            os.remove(p)
+    os.makedirs(chroma_path, exist_ok=True)
+
+    from models.sql_models import reset_engine, init_db
+    reset_engine()
+    init_db()
+
+    yield
+
+    # 清缓存 + 复原环境（避免卸载 app 时持有已删文件）
+    reset_engine()
+    _clear_chroma_cache()
+    if prev_db is not None:
+        os.environ["DATABASE_URL"] = prev_db
+    else:
+        os.environ.pop("DATABASE_URL", None)
+    if prev_chroma_env is not None:
+        os.environ["CHROMA_PERSIST_DIR"] = prev_chroma_env
+    else:
+        os.environ.pop("CHROMA_PERSIST_DIR", None)
+    importlib.reload(app.config)
+
+    for p in (chroma_path, db_path):
+        if os.path.isdir(p):
+            try:
+                shutil.rmtree(p)
+            except OSError:
+                pass
+        elif os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 
 @pytest.fixture
 def memory_service():
-    """Create a test memory service instance"""
+    """线程安全测试用 MemoryService，前后清空。"""
     from services.memory_service import MemoryService
+    from models.sql_models import get_thread_session
     service = MemoryService()
-
-    # Reset Chroma collection before test to ensure clean state
     service.chroma_client.reset()
-
     yield service
-
-    # Cleanup - delete all test data
+    session = get_thread_session()
     from models.sql_models import Memory, Emotion
-    service.db.query(Memory).delete()
-    service.db.query(Emotion).delete()
-    service.db.commit()
+    session.query(Memory).delete()
+    session.query(Emotion).delete()
+    session.commit()
     service.chroma_client.reset()
-    service.db.close()
 
 
 @pytest.fixture
 def client():
-    """Create test client"""
+    """FastAPI TestClient（用当前模块已隔离好的 env）。"""
     from fastapi.testclient import TestClient
     from app.main import app
-
-    # Set environment before importing app
-    os.environ["DATABASE_URL"] = "sqlite:///./data/test_sunchat.db"
-    os.environ["CHROMA_PERSIST_DIR"] = "./data/test_chroma"
-
-    # Re-import to reload with new config
-    # 注意：不能写 `import app.config`（会把局部名 app 重新绑定为包，遮蔽 FastAPI 实例）
-    import importlib
-    config_module = importlib.import_module("app.config")
-    importlib.reload(config_module)
-
-    # Re-initialize database
-    from models.sql_models import init_db
-    init_db()
-
     return TestClient(app)

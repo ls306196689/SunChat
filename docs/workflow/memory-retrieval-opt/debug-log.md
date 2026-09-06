@@ -13,3 +13,16 @@
 - 定位: `for mid, rrf in weight_map:` 对 dict 迭代得到 key(单值),缺 `.items()`。一次修复。
 - 回归: test_hybrid_search 双通道用例覆盖;另修正 test_rrf_merge_basic 用例自身断言错误(等势分数误判大小 → 用严格可区分排名),属测试设计缺陷非实现缺陷。修复后全量 145 passed。
 
+
+## D-3 测试隔离击穿生产库(数据事故 occurred) + 跨模块泄漏连环
+- 状态: resolved | 步骤5后评测期 | 2026-09-06
+- 事故: 新测试用模块级 autouse fixture 与 conftest 同名 setup_test_environment → pytest 规则模块级覆盖 conftest, 但其 body 未 mock 环境变量(旧模块同样缺失, 属存量地雷)→ reset_engine 指向生产 sunchat.db, fresh_db fixture query(Memory).delete() 把真实 24 条记忆删除(会话/消息完好)。
+- 处置: 用户确认从日志恢复; 结合 messages 表对话历史交叉验证身份/偏好事实, 重建 12 条(孙鹏飞/咖啡美式/辣椒/运动/马拉松配速520/Alicare股票等); 排除测试污染文本。
+- 根因修复(5 层):
+  1. sql_models._guard_pytest_real_db: PYTEST 运行中测试连接非 test_ DB 直接 RuntimeError(防再次打穿)。
+  2. conftest 新增 session 级 global_test_env_isolation(不可被遮蔽专名) + module 级 module_isolated_env: 每模块独立 DB/Chroma 文件并统一建库。
+  3. 全部模块自设 setup_* fixture 改为仅 init_db(不再删共享文件/改环境变量)。
+  4. ChromaClient._get_client 运行时读 settings + path/inode 漂移检测 + SharedSystemClient.clear_system_cache() 清陈旧句柄(修 'unable to open database file'/'readonly database'); _get_collection 每次校验绑定。
+  5. model_manager._config_path 改 property 运行时解析(测试不再覆盖真实 model_config.json)。
+- 跨模块连锁泄漏排查记录(≤2 回合/问题, 逐个证据定位): readonly-db→chroma 系统缓存 unlink 句柄; no such table: memory_fts→init_db 未建 FTS 表(生产同样受益: 任何新库自带); 统计接口 500→ChromaClient 陈旧 collection 短路; test_fts_index.py 被自己一行 read-after-truncate 脚本清零→重建。
+- 回归: 全量 148 passed/1 skip(顺序+随机多次); 守卫用例证明 pytest 中连真实库必抛 guard 错误。

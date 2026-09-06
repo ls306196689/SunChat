@@ -35,13 +35,18 @@ class ModelManager:
         self._lock = threading.Lock()
         self._available_cache: Optional[List[Dict]] = None
         self._available_ts: float = 0.0
-        self._config_path = settings.MODEL_CONFIG_PATH
         self._ttl = getattr(settings, "MODEL_CACHE_TTL", 30)
         # 运行时选择（持久化）
         self._chat_model_override: Optional[str] = None
         self._embedding_model_override: Optional[str] = None
         self._vector_store_model: Optional[str] = None
         self._load_config()
+
+    @property
+    def _config_path(self) -> str:
+        # 运行时解析，支持测试隔离（模块级 import 早于配置 reload 时也不绑定生产路径）
+        import app.config as _cfg
+        return str(_cfg.settings.MODEL_CONFIG_PATH)
 
     # ==================== 持久化 ====================
 

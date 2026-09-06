@@ -14,34 +14,11 @@ from app.main import app
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_test_database():
-    """Setup test database before tests"""
-    os.makedirs("./data", exist_ok=True)
-
-    # Clean up any existing test database
-    test_db_path = "./data/test_sunchat.db"
-    test_chroma_path = "./data/test_chroma"
-
-    if os.path.exists(test_db_path):
-        os.remove(test_db_path)
-
-    if os.path.exists(test_chroma_path):
-        shutil.rmtree(test_chroma_path)
-
-    # 重建 engine 并建表（删库后旧连接指向旧文件；本模块需自建表）
-    from models.sql_models import init_db, reset_engine
-    reset_engine()
+def setup_test_environment():
+    """DB/Chroma 由 conftest 模块级隔离 fixture 建立; 此处仅确保表存在。"""
+    from models.sql_models import init_db
     init_db()
-
     yield
-
-    # Cleanup after all tests
-    if os.path.exists(test_db_path):
-        os.remove(test_db_path)
-
-    if os.path.exists(test_chroma_path):
-        shutil.rmtree(test_chroma_path)
-
 
 @pytest.fixture
 def client():

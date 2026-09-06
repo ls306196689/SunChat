@@ -17,21 +17,10 @@ from models.sql_models import init_db, get_thread_session, reset_engine, Memory
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_test_environment():
-    os.makedirs("./data", exist_ok=True)
-    for p in ("./data/test_sunchat.db", "./data/test_chroma"):
-        if os.path.isdir(p):
-            shutil.rmtree(p)
-        elif os.path.exists(p):
-            os.remove(p)
-    reset_engine()
+    """DB/Chroma 由 conftest 模块级隔离 fixture 建立; 此处仅确保表存在。"""
+    from models.sql_models import init_db
     init_db()
     yield
-    for p in ("./data/test_sunchat.db", "./data/test_chroma"):
-        if os.path.isdir(p):
-            shutil.rmtree(p)
-        elif os.path.exists(p):
-            os.remove(p)
-
 
 @pytest.fixture
 def db():

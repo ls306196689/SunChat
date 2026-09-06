@@ -18,24 +18,54 @@ from utils.logger import memory_logger, logger
 
 
 class ChromaClient:
-    """Chroma 向量数据库客户端"""
+    """Chroma 向量数据库客户端（路径运行时解析，支持测试隔离配置切换）"""
 
     def __init__(self, persist_directory: str = None):
+        self._fixed_dir = persist_directory
         self.persist_directory = persist_directory or settings.CHROMA_PERSIST_DIR
+        self._bound_dir = None
+        self._bound_ino = None
         self._client = None
         self._collection = None
 
     def _get_client(self):
-        """获取 Chroma 客户端实例"""
-        if self._client is None:
+        """获取 Chroma 客户端实例（配置路径变化, 或绑定目录被删/重建(inode 变)时自动
+        重绑, 防测试污染/误删目录后句柄指向已 unlink 的只读旧库）"""
+        import os
+        import app.config as _cfg
+        want = self._fixed_dir or str(_cfg.settings.CHROMA_PERSIST_DIR)
+        try:
+            cur_ino = os.stat(want).st_ino
+        except OSError:
+            cur_ino = None
+        stale = (self._client is None or self._bound_dir != want
+                 or self._bound_ino != cur_ino)
+        if stale:
             import chromadb
-            self._client = chromadb.PersistentClient(path=self.persist_directory)
+            os.makedirs(want, exist_ok=True)
+            # 关键: 丢弃可能缓存的、其 sqlite 文件已被删除的陈旧 system
+            # （跨模块测试隔离时, 旧 path 的 system 仍缓存在 SharedSystemClient，
+            # 复用即 "unable to open database file"）
+            try:
+                from chromadb.api.client import SharedSystemClient
+                SharedSystemClient.clear_system_cache()
+            except Exception:
+                pass
+            self._client = chromadb.PersistentClient(path=want)
+            self.persist_directory = want
+            self._bound_dir = want
+            try:
+                self._bound_ino = os.stat(want).st_ino
+            except OSError:
+                self._bound_ino = None
+            self._collection = None
         return self._client
 
     def _get_collection(self, collection_name: str = "memories"):
-        """获取集合"""
+        """获取集合（每次经 _get_client 校验绑定，路径/inode 变化时自动失效重建）"""
+        self._get_client()  # 触发 stale 检测与重建（会置 _collection=None）
         if self._collection is None:
-            self._collection = self._get_client().get_or_create_collection(
+            self._collection = self._client.get_or_create_collection(
                 name=collection_name,
                 metadata={"hnsw:space": "cosine"}
             )

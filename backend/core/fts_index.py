@@ -74,6 +74,14 @@ def fts_sync_upsert(memory_id: str, content: str) -> bool:
                 (memory_id, tokenize(content)),
             )
         return True
+    except sqlite3.OperationalError as e:
+        # 表缺失(新库未走启动初始化): 补建后重试一次
+        if "no such table" in str(e):
+            if init_fts():
+                return fts_sync_upsert(memory_id, content)
+            return False
+        logger.warning(f"[FTS] upsert 失败 - memory_id:{memory_id}: {e}")
+        return False
     except Exception as e:
         logger.warning(f"[FTS] upsert 失败 - memory_id:{memory_id}: {e}")
         return False
@@ -89,7 +97,7 @@ def fts_sync_delete(memory_id: str) -> bool:
             )
         return True
     except Exception as e:
-        logger.warning(f"[FTS] delete 失败 - memory_id:{memory_id}: {e}")
+        logger.debug(f"[FTS] delete 跳过/失败 - memory_id:{memory_id}: {e}")
         return False
 
 

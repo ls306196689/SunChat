@@ -20,7 +20,20 @@ _engine_file_inode = None
 _session_local = None
 
 
+def _guard_pytest_real_db(url: str):
+    """守卫：pytest 运行期间禁止连接生产库（真实记忆数据），防止测试隔离失误清库。"""
+    import os as _os
+    if _os.environ.get("PYTEST_CURRENT_TEST"):
+        expect = str(url)
+        if expect.startswith("sqlite:///") and "test_" not in expect:
+            raise RuntimeError(
+                f"TEST ISOLATION GUARD: pytest 运行中测试代码尝试连接生产数据库 {expect}。"
+                "请在测试模块内 patch 环境变量 DATABASE_URL 指向 ./data/test_*.db"
+            )
+
+
 def _make_engine(url: str):
+    _guard_pytest_real_db(url)
     kwargs = {}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
@@ -146,11 +159,25 @@ def get_thread_session():
     - 路由改为同步 ``def`` 后由 FastAPI 丢进线程池执行，每线程一个 Session 天然隔离。
     - service 仍以 ``self.db`` 属性暴露（返回本线程 Session），保持既有调用/测试兼容。
     - 后台任务（BackgroundTasks）运行在独立线程，自动获得独立 Session。
+    - engine 轮转（测试逐模块换库 / 生产 URL 或 inode 变化）后，线程本地旧 Session
+      仍绑在被 dispose/删除的旧 Engine 上 → "unable to open database file"；
+      此处按 bind 的 Engine 身份检测并重建 Session。
     """
     session = getattr(_thread_local, "session", None)
+    engine = get_engine()
     if session is None:
         session = get_session_local()()
+        session._bound_engine = engine
         _thread_local.session = session
+    elif getattr(session, "_bound_engine", None) is not engine:
+        try:
+            if session.in_transaction():
+                session.rollback()
+            session.close()
+        finally:
+            session = get_session_local()()
+            session._bound_engine = engine
+            _thread_local.session = session
     # 注意：此处不能回滚 in_transaction 的事务——同一方法内多次访问 self.db
     # （add → commit → refresh）期间存在合法待提交事务，回滚会毁掉未提交的写入。
     # 遗留的只读事务留着无害（后续操作可继续或提交），异常清理由调用方/边界负责。
@@ -341,8 +368,13 @@ def ensure_schema():
 
 
 def init_db():
-    """初始化数据库（建表 + 轻量迁移）"""
+    """初始化数据库（建表 + 轻量迁移 + FTS 影子表）。"""
     ensure_schema()
+    try:
+        from core.fts_index import init_fts
+        init_fts()
+    except Exception:
+        pass  # FTS5 不可用时静默降级, 不影响建表
 
 
 def get_db():

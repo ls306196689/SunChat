@@ -1,12 +1,18 @@
 {
   "project": "memory-retrieval-opt",
-  "phase": "architecture",
+  "phase": "modules",
   "gates": [
     {
       "gate": "requirements_confirmed",
       "at": "2026-09-06T16:00:00+08:00",
       "confirmed_by": "user",
       "note": "FR1-8/AC1-5 冻结, D-001~005"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-06T16:20:00+08:00",
+      "confirmed_by": "user",
+      "note": "5模块无环;风险表R1-R6评审通过;FTS5 trigram实测验证(短语精确匹配OK,子串<3字不支持)"
     }
   ],
   "clarifications": [
@@ -41,7 +47,33 @@
       "status": "closed"
     }
   ],
-  "modules": [],
+  "modules": [
+    {
+      "name": "storage-consistency",
+      "design_doc": "design/modules/storage-consistency.md",
+      "design_done": false
+    },
+    {
+      "name": "fts-index",
+      "design_doc": "design/modules/fts-index.md",
+      "design_done": false
+    },
+    {
+      "name": "hybrid-search",
+      "design_doc": "design/modules/hybrid-search.md",
+      "design_done": false
+    },
+    {
+      "name": "chat-injection",
+      "design_doc": "design/modules/chat-injection.md",
+      "design_done": false
+    },
+    {
+      "name": "eval",
+      "design_doc": "design/modules/eval.md",
+      "design_done": false
+    }
+  ],
   "steps": [],
   "requirements_version": 1,
   "change_count": 0,
@@ -102,5 +134,5 @@
     "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9",
     "push_pending": false
   },
-  "updated_at": "2026-09-06T16:00:00+08:00"
+  "updated_at": "2026-09-06T16:20:00+08:00"
 }

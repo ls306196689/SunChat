@@ -281,8 +281,24 @@ AI 回答: {ai_response}
             except Exception as e:
                 logger.warning(f"[CHAT] 行情直查失败（忽略）: {e}")
 
+            # 天气直查优先：wttr.in 实时数据，命中则不再走 DDG（更快更准）
+            weather_hit = False
             try:
-                decision = chat_router.route(content, context={"memories": memory_context})
+                from core.weather import is_weather_query, get_weather_context
+                if is_weather_query(content):
+                    weather_ctx = get_weather_context(content)
+                    if weather_ctx:
+                        weather_hit = True
+                        system_prompt += f"\n\n{weather_ctx}\n请直接引用上述实时天气数据回答。"
+                        sources.append({
+                            "title": "wttr.in（实时天气）", "url": "https://wttr.in/",
+                            "source": "wttr-in", "snippet": weather_ctx, "score": 1.0})
+            except Exception as e:
+                logger.warning(f"[CHAT] 天气直查失败（忽略）: {e}")
+
+            try:
+                decision = ({"tool": None} if weather_hit else
+                            chat_router.route(content, context={"memories": memory_context}))
                 if decision.get("tool") == "search":
                     from services.search_service import search_svc
                     summary = search_svc.search_with_introduction(content, memory_context)

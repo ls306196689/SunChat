@@ -1,0 +1,26 @@
+{
+  "req_id": "R-001",
+  "req_type": "feature",
+  "base_requirements": [],
+  "project": "sunchat",
+  "phase": "clarify",
+  "gates": [],
+  "clarifications": [
+    { "id": 1, "question": "未收录天气描述词透传英文原文,可接受还是需补翻译?", "resolution": null, "status": "open" },
+    { "id": 2, "question": "未指明城市时 wttr.in 服务端 IP 定位(非用户城市),可接受?", "resolution": null, "status": "open" },
+    { "id": 3, "question": "天气直查失败回退策略:回退 DDG(现状) vs 直接告知不可用?", "resolution": null, "status": "open" }
+  ],
+  "modules": [],
+  "steps": [],
+  "analyses": [],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    { "id": "R-1", "desc": "wttr.in 公共免费服务不稳定/限流,天气直查随机失败", "prob": "中", "impact": "中", "mitigation": "失败返回 None 自动回退 DDG;超时 10s 快速失败", "status": "mitigated" },
+    { "id": "R-2", "desc": "wttr.in 响应格式变更导致解析失败", "prob": "低", "impact": "中", "mitigation": "解析异常捕获→None→回退;单测锁定字段契约", "status": "mitigated" },
+    { "id": "R-3", "desc": "天气关键词误命中(如'温度对电池影响')导致该搜索的问题走了天气直查", "prob": "低", "impact": "低", "mitigation": "命中后取不到城市仍回退普通搜索;关键词表保守", "status": "mitigated" }
+  ],
+  "repo": { "created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9", "push_pending": true },
+  "updated_at": "2026-09-08T23:17:30+08:00"
+}

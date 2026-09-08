@@ -6,6 +6,7 @@ SunChat Backend - Agent Tools
 - user_id 由 Agent 循环注入，不作为 LLM 可见参数（防越权，修 A6）
 - 工具返回 schema.ToolResult（单一来源，修 A8 重名问题）
 """
+import inspect
 import json
 from typing import List, Dict, Any, Optional, Callable
 from functools import wraps
@@ -107,6 +108,26 @@ def web_search(query: str, max_results: int = 5):
 
 
 @tool(
+    name="get_weather",
+    description="查询指定城市的实时天气（气温/湿度/风力/今日最高最低）。天气类问题优先用此工具，勿用 web_search。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "city": {"type": "string",
+                     "description": "城市名，中文或英文，如：北京 / Shanghai"},
+        },
+        "required": ["city"],
+    },
+)
+def get_weather(city: str):
+    from core.weather import get_weather_context
+    ctx = get_weather_context(f"{city}天气")
+    if not ctx:
+        raise ValueError(f"未获取到 {city} 的天气数据")
+    return ctx
+
+
+@tool(
     name="knowledge_search",
     description="从用户上传的知识库文档中检索相关内容。",
     parameters={
@@ -149,7 +170,12 @@ def execute_tool(name: str, arguments: Dict[str, Any],
 
     args = dict(arguments or {})
     args.pop("user_id", None)  # 防 LLM 伪造 user_id
-    args["user_id"] = user_id or settings.LOCAL_USER_ID
+    try:
+        accepts_user_id = "user_id" in inspect.signature(td.function).parameters
+    except (TypeError, ValueError):
+        accepts_user_id = False
+    if accepts_user_id:
+        args["user_id"] = user_id or settings.LOCAL_USER_ID
 
     allowed = set((td.parameters or {}).get("properties", {}).keys()) | {"user_id"}
     args = {k: v for k, v in args.items() if k in allowed}

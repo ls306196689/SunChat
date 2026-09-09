@@ -1,6 +1,6 @@
 # R-003 直查短路补全 + /health 搜索探活缓存
 
-需求: R-003 | 类型: iteration(micro) | 状态: confirmed | 日期: 2026-09-08
+需求: R-003 | 类型: iteration(micro) | 状态: done | 日期: 2026-09-08
 > 门禁备注: 用户已授权"后续不要再让我确认,直接执行"(2026-09-08),各门禁按推荐项自动通过,confirmed_by=user(delegated)。
 
 ## 修订记录
@@ -59,3 +59,13 @@ search.py 增加模块级 `_avail_cache=(monotonic_ts, bool)` 类属性,TTL 常�
 ## 不做清单(明示)
 - 行情/天气并行化:两意图同句罕见,串行最坏叠加概率低,引入线程复杂度不值(analysis A-1/C2 → 决策不做)。
 - session_id 静默回退会话1(A-2)、日志轮转(A-3):行为变更面与收益不匹配,记基线观察项,后续需要另立需求。
+
+## 验收对照(done 2026-09-08)
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 | 通过 | test_stock_hit_skips_ddg_search:spy 断言 search_with_introduction 零调用 |
+| AC-2 | 通过 | test_no_direct_hit_still_searches:普通意图仍走 DDG |
+| AC-3 | 通过 | test_check_availability_cached(+failure cached):新鲜期 1 次请求,过期重测 |
+| AC-4 | 通过 | `pytest tests/ -q` → 164 passed, 1 skipped;实机 /health 2.1s→~1.0s(冷启首探+Ollama 检查) |
+风险终态: R-1 mitigated(不做清单声明) R-2 mitigated(TTL 短窗)。commit: 本步 feat 提交单步完成。
+观察项遗留(A-2 session_id 静默回退 / A-3 日志轮转)已在不做清单登记,后续需要另立需求。

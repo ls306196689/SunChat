@@ -1,6 +1,6 @@
 # sunchat 需求台账
 
-当前需求 ID:R-003(下一个将分配) | 设计基线:见 baseline.md
+当前需求 ID:R-004(下一个将分配) | 设计基线:见 baseline.md
 
 ## 需求历史
 | ID | 主题 | 类型 | 状态 | 基线修订 | 起止日期 |
@@ -15,3 +15,4 @@
   `docs/workflow/sunchat-opt/`、`docs/workflow/memory-retrieval-opt/`(只读归档,追溯编号经
   用户确认豁免,2026-09-08)。
 - 本台账自 R-001 起执行 R-NNN 主线;commit 必须含 R-NNN。
+| R-003 | 直查短路补全(行情)+/health 探活缓存 | iteration | done | - | 2026-09-08 |

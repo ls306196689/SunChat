@@ -11,6 +11,40 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestSearchService:
     """Test cases for SearchService"""
 
+    def test_check_availability_cached(self, monkeypatch):
+        """R-003/AC-3: 60s 内二次调用不发网络请求;过期后重测"""
+        from core.search import SearchService
+
+        svc = SearchService()
+        calls = []
+
+        class FakeDDGS:
+            def text(self, q, max_results=1):
+                calls.append(q)
+                return [{}]
+        monkeypatch.setattr(svc, "ddgs", FakeDDGS())
+
+        assert svc.check_availability() is True
+        assert svc.check_availability() is True
+        assert len(calls) == 1, "新鲜期内不应重复请求"
+
+        # 拨时钟令缓存过期
+        ts, val = svc._avail_cache
+        svc._avail_cache = (ts - 61, val)
+        assert svc.check_availability() is True
+        assert len(calls) == 2, "过期后应重新探测"
+
+    def test_check_availability_failure_cached_false(self, monkeypatch):
+        from core.search import SearchService
+        svc = SearchService()
+
+        class FakeDDGS:
+            def text(self, q, max_results=1):
+                raise ConnectionError("down")
+        monkeypatch.setattr(svc, "ddgs", FakeDDGS())
+        assert svc.check_availability() is False
+        assert svc.check_availability() is False  # 失败结果同样缓存,不反复打
+
     def test_route_query_with_memories(self):
         """Test routing query with memories"""
         from services.search_service import search_svc

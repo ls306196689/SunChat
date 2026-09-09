@@ -1,0 +1,30 @@
+{
+  "req_id": "R-003",
+  "req_type": "iteration",
+  "base_requirements": ["R-001", "R-002"],
+  "project": "sunchat",
+  "phase": "micro_execute",
+  "gates": [
+    { "gate": "change_confirmed", "at": "2026-09-08T23:55:00+08:00", "confirmed_by": "user", "note": "用户总授权'directly execute 不再确认'(2026-09-08),门禁按推荐直通" },
+    { "gate": "micro_design_confirmed", "at": "2026-09-08T23:55:00+08:00", "confirmed_by": "user", "note": "同上授权" }
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    { "id": 1, "title": "行情短路 + health 探活缓存 + 回归单测", "module": "chat/search", "status": "in_progress", "verified": false }
+  ],
+  "analyses": [
+    { "id": "A-1", "topic": "直查族时序浪费:行情不短路+health每次真打DDG", "conclusion": "C1 行情命中仍走搜索;C3 health 探活无缓存实测2.1s", "evidence_count": 5, "status": "confirmed" },
+    { "id": "A-2", "topic": "session_id 非法静默回退会话1", "conclusion": "观察项,本需求不改(记不做清单)", "evidence_count": 3, "status": "confirmed" },
+    { "id": "A-3", "topic": "日志无轮转", "conclusion": "观察项(4.4M/3个月),不修", "evidence_count": 1, "status": "confirmed" }
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    { "id": "R-1", "desc": "行情短路后'茅台股价和天气'类复合问题天气不受影响但DDG被跳,缺新闻面", "prob": "低", "impact": "低", "mitigation": "行情/天气数字已是最权威来源,DDG摘要本就非实时;不做清单已声明", "status": "mitigated" },
+    { "id": "R-2", "desc": "60s 缓存窗口内 DDG 状态翻转显示过时", "prob": "中", "impact": "低", "mitigation": "TTL=60s 短窗;health 为展示用途非决策用途", "status": "mitigated" }
+  ],
+  "repo": { "created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "63e28d07", "push_pending": false },
+  "updated_at": "2026-09-08T23:55:00+08:00"
+}

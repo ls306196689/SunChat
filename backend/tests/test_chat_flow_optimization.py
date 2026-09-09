@@ -163,6 +163,52 @@ class TestProcessMessageOptimization:
         assert chat_router.route("阿里巴巴股价多少")["tool"] == "search"
         assert chat_router.route("英伟达今天涨了还是跌了")["tool"] == "search"
 
+    def test_stock_hit_skips_ddg_search(self, service, monkeypatch):
+        """R-003/AC-1: 行情直查命中 → 短路,不再调 DDG 搜索归纳(权威数字已注入)"""
+        class Resp:
+            text = ('v_usBABA="200~阿里巴巴~BABA.N~113.24~111.81~112.37~7182522~0~0~'
+                    '113.01~100~0~0~0~0~0~0~0~0~113.18~100~0~0~0~0~0~0~0~0~~'
+                    '2026-09-04 16:04:38~1.43~1.28~113.41~111.97~USD~7182522~'
+                    + "810867596~0.29~25.89~~17.76~1:8~1.29~2765.24284~2814.72018~"
+                    + "Alibaba Group Holding Ltd~" + "~".join(["0"] * 30) + '";')
+            encoding = "gbk"
+        import core.stock as stock_mod
+        monkeypatch.setattr(stock_mod.requests, "get", lambda *a, **kw: Resp())
+
+        hits = []
+        import services.search_service as ss_mod
+
+        def spy(*a, **kw):
+            hits.append(1)
+            return {"answer": "", "sources": [], "intent": "general"}
+        monkeypatch.setattr(ss_mod.search_svc, "search_with_introduction", spy)
+
+        uid = 5113
+        sid = self._session(service, uid)
+        result = service.process_message(
+            user_id=uid, session_id=sid, content="BABA股价多少",
+            memory_enabled=False, search_enabled=True)
+        assert not hits, "行情命中后不应再走 DDG 搜索归纳"
+        assert any(s["source"] == "tencent-quote" for s in result["sources"])
+
+    def test_no_direct_hit_still_searches(self, service, monkeypatch):
+        """R-003/AC-2 回归: 行情/天气均未命中 → 仍按路由走 DDG(既有行为不变)"""
+        hits = []
+        import services.search_service as ss_mod
+        orig = ss_mod.search_svc.search_with_introduction
+
+        def spy(*a, **kw):
+            hits.append(1)
+            return orig(*a, **kw)
+        monkeypatch.setattr(ss_mod.search_svc, "search_with_introduction", spy)
+
+        uid = 5114
+        sid = self._session(service, uid)
+        result = service.process_message(
+            user_id=uid, session_id=sid, content="最新的新闻是什么",
+            memory_enabled=False, search_enabled=True)
+        assert hits, "普通搜索意图仍应走 DDG"
+
     def test_real_tokens_used(self, service):
         """eval_count 真实值写入返回与 Message.tokens_used"""
         uid = 5106

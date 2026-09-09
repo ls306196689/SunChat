@@ -3,6 +3,7 @@ SunChat Backend - Search Service
 优先使用 ddgs（duckduckgo_search 后继维护包），旧包作回退；带超时。
 """
 import re
+import time
 from typing import List, Dict, Optional
 
 from app.config import settings
@@ -17,7 +18,10 @@ except ImportError:  # 旧包回退
 class SearchService:
     """搜索服务（使用 DuckDuckGo）"""
 
+    AVAIL_TTL = 60  # 探活缓存秒数
+
     def __init__(self):
+        self._avail_cache = None  # (monotonic_ts, bool)
         # 不同版本 DDGS 对 timeout 参数支持不一，做兼容
         try:
             self.ddgs = DDGS(timeout=settings.SEARCH_TIMEOUT)
@@ -70,12 +74,19 @@ class SearchService:
         }
 
     def check_availability(self) -> bool:
-        """检查搜索服务是否可用"""
+        """检查搜索服务是否可用（结果缓存 60s，健康检查轮询不再每次打 DDG）。"""
+        now = time.monotonic()
+        if self._avail_cache is not None:
+            ts, val = self._avail_cache
+            if now - ts < self.AVAIL_TTL:
+                return val
         try:
             result = self.ddgs.text("test", max_results=1)
-            return len(result) > 0
+            val = len(result) > 0
         except Exception:
-            return False
+            val = False
+        self._avail_cache = (now, val)
+        return val
 
 
 search_service = SearchService()

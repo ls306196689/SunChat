@@ -269,11 +269,13 @@ AI 回答: {ai_response}
 
         if search_enabled:
             # 行情直查优先：股价类问题直接拿权威数字，不经 DDG/意图路由
+            stock_hit = False
             try:
                 from core.stock import is_stock_query, get_stock_context
                 if is_stock_query(content):
                     stock_ctx = get_stock_context(content)
                     if stock_ctx:
+                        stock_hit = True
                         system_prompt += f"\n\n{stock_ctx}\n请直接引用上述实时数字回答。"
                         sources.append({
                             "title": "腾讯行情（实时数据）", "url": "https://gu.qq.com/",
@@ -297,7 +299,7 @@ AI 回答: {ai_response}
                 logger.warning(f"[CHAT] 天气直查失败（忽略）: {e}")
 
             try:
-                decision = ({"tool": None} if weather_hit else
+                decision = ({"tool": None} if (weather_hit or stock_hit) else
                             chat_router.route(content, context={"memories": memory_context}))
                 if decision.get("tool") == "search":
                     from services.search_service import search_svc

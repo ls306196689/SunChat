@@ -7,12 +7,11 @@
 |---|---|---|---|---|---|
 | (预流程) | sunchat-opt 系统优化收敛(S1-S9) | feature | done | - | 2026-09-05~06 |
 | (预流程) | memory-retrieval-opt 记忆检索优化 | iteration | done | 产出 design/ 基线 | 2026-09-06 |
-- | R-001 | 天气直查(wttr.in 数据源+对话直查+Agent get_weather 工具) | feature | done | weather-core/chat-direct-weather | 2026-09-08 |
-| R-002 | Agent 工具框架 user_id 注入缺陷修复 | bugfix | done | - | 2026-09-08 |
-
-## 说明
 - 预流程两条为 req-dev 引入前的旧工件,原位保留于
   `docs/workflow/sunchat-opt/`、`docs/workflow/memory-retrieval-opt/`(只读归档,追溯编号经
   用户确认豁免,2026-09-08)。
 - 本台账自 R-001 起执行 R-NNN 主线;commit 必须含 R-NNN。
+
+| R-001 | 天气直查(wttr.in 数据源+对话直查+Agent get_weather 工具) | feature | done | weather-core/chat-direct-weather | 2026-09-08 |
+| R-002 | Agent 工具框架 user_id 注入缺陷修复 | bugfix | done | - | 2026-09-08 |
 | R-003 | 直查短路补全(行情)+/health 探活缓存 | iteration | done | - | 2026-09-08 |

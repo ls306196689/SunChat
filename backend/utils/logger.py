@@ -4,7 +4,9 @@ SunChat Backend - Logger Utility
 """
 import logging
 import os
+import time
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from typing import Optional
 
 # 创建日志目录
@@ -13,10 +15,30 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 # 日志文件路径
 LOG_FILE = os.path.join(LOG_DIR, f"sunchat_{datetime.now().strftime('%Y%m%d')}.log")
+LOG_MAX_BYTES = 10 * 1024 * 1024  # 单文件 10MB
+LOG_BACKUP_COUNT = 7               # 滚动保留 7 份
+LOG_RETENTION_DAYS = 30            # 历史日志保留 30 天
 
 # 配置日志格式
 LOG_FORMAT = '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s'
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+
+def _cleanup_old_logs():
+    """删除超过 LOG_RETENTION_DAYS 的历史日志(含滚动备份)。失败静默。"""
+    cutoff = time.time() - LOG_RETENTION_DAYS * 86400
+    try:
+        for fn in os.listdir(LOG_DIR):
+            if not fn.startswith("sunchat_"):
+                continue
+            fp = os.path.join(LOG_DIR, fn)
+            try:
+                if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+                    os.remove(fp)
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def get_logger(name: str = 'sunchat') -> logging.Logger:
@@ -29,8 +51,11 @@ def get_logger(name: str = 'sunchat') -> logging.Logger:
 
     logger.setLevel(logging.DEBUG)
 
-    # 文件处理器
-    file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
+    # 文件处理器(R-004: 轮转封顶,单文件 10MB × 7 份;跨日仍按日新文件)
+    _cleanup_old_logs()
+    file_handler = RotatingFileHandler(
+        LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT,
+        encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
     logger.addHandler(file_handler)

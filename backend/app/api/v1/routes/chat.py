@@ -24,6 +24,13 @@ from services.memory_service import memory_service
 router = APIRouter()
 
 
+def _resolve_session_id(raw: str) -> int:
+    """R-004: session_id 统一校验（与 PATCH/DELETE 语义对齐）,非法一律 400,禁止静默回退会话1。"""
+    if not raw or not raw.isdigit():
+        raise HTTPException(status_code=400, detail="session_id 非法")
+    return int(raw)
+
+
 class ChatRequest(BaseModel):
     session_id: str
     content: str
@@ -64,7 +71,7 @@ def create_message(request: ChatRequest):
         # 调用chat_service.process_message实现完整流程
         result = chat_service.process_message(
             user_id=user_id,
-            session_id=int(request.session_id) if request.session_id.isdigit() else 1,
+            session_id=_resolve_session_id(request.session_id),
             content=request.content,
             memory_enabled=request.memory_context,
             search_enabled=request.search_enabled,
@@ -206,10 +213,7 @@ def stream_chat(request: StreamChatRequest):
         raise HTTPException(status_code=400, detail=reason)
 
     user_id = settings.LOCAL_USER_ID
-    try:
-        session_id = int(request.session_id) if request.session_id.isdigit() else 1
-    except ValueError:
-        raise HTTPException(status_code=400, detail="session_id 非法")
+    session_id = _resolve_session_id(request.session_id)
 
     def gen():
         try:

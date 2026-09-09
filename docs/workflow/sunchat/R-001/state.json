@@ -1,9 +1,11 @@
 {
   "req_id": "R-001",
   "req_type": "feature",
-  "base_requirements": [],
+  "base_requirements": [
+    "R-002"
+  ],
   "project": "sunchat",
-  "phase": "modules",
+  "phase": "execute",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -16,6 +18,18 @@
       "at": "2026-09-08T23:29:00+08:00",
       "confirmed_by": "user",
       "note": "design-change r1+C1-C3,风险表R1-R6评审通过"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-08T23:32:00+08:00",
+      "confirmed_by": "user",
+      "note": "2模块整批确认"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-08T23:35:00+08:00",
+      "confirmed_by": "user",
+      "note": "4步计划确认,依赖R-002"
     }
   ],
   "clarifications": [
@@ -38,8 +52,48 @@
       "status": "closed"
     }
   ],
-  "modules": [],
-  "steps": [],
+  "modules": [
+    {
+      "name": "weather-core",
+      "design_doc": "R-001/modules/weather-core.md",
+      "design_done": true
+    },
+    {
+      "name": "chat-direct-weather",
+      "design_doc": "R-001/modules/chat-direct-weather.md",
+      "design_done": true
+    }
+  ],
+  "steps": [
+    {
+      "id": 1,
+      "title": "_to_cities 去除 IP 定位回退(D-004)+单测",
+      "module": "weather-core",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 2,
+      "title": "AC-1/2 校验:识别与解析契约",
+      "module": "weather-core",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 3,
+      "title": "AC-3 校验:工具注册+执行(依赖R-002)",
+      "module": "chat-direct-weather",
+      "status": "pending",
+      "verified": false
+    },
+    {
+      "id": 4,
+      "title": "AC-4 实机抽查+AC-5 全量回归",
+      "module": "集成",
+      "status": "pending",
+      "verified": false
+    }
+  ],
   "analyses": [],
   "requirements_version": 1,
   "change_count": 0,
@@ -101,5 +155,5 @@
     "last_pushed_commit": "9166897e",
     "push_pending": false
   },
-  "updated_at": "2026-09-08T23:29:00+08:00"
+  "updated_at": "2026-09-08T23:35:00+08:00"
 }

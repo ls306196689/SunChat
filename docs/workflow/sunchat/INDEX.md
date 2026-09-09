@@ -7,7 +7,7 @@
 |---|---|---|---|---|---|
 | (预流程) | sunchat-opt 系统优化收敛(S1-S9) | feature | done | - | 2026-09-05~06 |
 | (预流程) | memory-retrieval-opt 记忆检索优化 | iteration | done | 产出 design/ 基线 | 2026-09-06 |
-| R-001 | 天气直查(wttr.in 数据源+对话直查+Agent get_weather 工具) | feature | active | - | 2026-09-08~ |
+- | R-001 | 天气直查(wttr.in 数据源+对话直查+Agent get_weather 工具) | feature | active | - | 2026-09-08~ |
 | R-002 | Agent 工具框架 user_id 注入缺陷修复 | bugfix | active | - | 2026-09-08~ |
 
 ## 说明

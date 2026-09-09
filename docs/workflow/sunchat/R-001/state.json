@@ -3,13 +3,19 @@
   "req_type": "feature",
   "base_requirements": [],
   "project": "sunchat",
-  "phase": "architecture",
+  "phase": "modules",
   "gates": [
     {
       "gate": "requirements_confirmed",
       "at": "2026-09-08T23:24:00+08:00",
       "confirmed_by": "user",
       "note": "FR1-5/AC1-5冻结,D-001~005"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-08T23:29:00+08:00",
+      "confirmed_by": "user",
+      "note": "design-change r1+C1-C3,风险表R1-R6评审通过"
     }
   ],
   "clarifications": [
@@ -33,36 +39,7 @@
     }
   ],
   "modules": [],
-  "steps": [
-    {
-      "id": 1,
-      "title": "core/weather.py 天气直查模块+中文描述表+单测",
-      "module": "M1",
-      "status": "done",
-      "verified": true
-    },
-    {
-      "id": 2,
-      "title": "chat_service 对话路径直查优先接入+单测",
-      "module": "M2",
-      "status": "done",
-      "verified": true
-    },
-    {
-      "id": 3,
-      "title": "agent tools 注册 get_weather+实机SSE抽查",
-      "module": "M1",
-      "status": "done",
-      "verified": true
-    },
-    {
-      "id": 4,
-      "title": "_to_cities 去掉 IP 定位回退(D-004)+回归测试调整",
-      "module": "M1",
-      "status": "pending",
-      "verified": false
-    }
-  ],
+  "steps": [],
   "analyses": [],
   "requirements_version": 1,
   "change_count": 0,
@@ -70,35 +47,51 @@
   "risks": [
     {
       "id": "R-1",
-      "desc": "wttr.in 公共免费服务不稳定/限流,天气直查随机失败",
+      "desc": "wttr.in 公共服不稳定/限流,直查随机失败",
       "prob": "中",
       "impact": "中",
-      "mitigation": "失败返回 None 自动回退 DDG;超时 10s 快速失败",
+      "mitigation": "失败→None→回退DDG;10s超时",
       "status": "mitigated"
     },
     {
       "id": "R-2",
-      "desc": "wttr.in 响应格式变更导致解析失败",
+      "desc": "wttr.in JSON 字段变更致解析失败",
       "prob": "低",
       "impact": "中",
-      "mitigation": "解析异常捕获→None→回退;单测锁定字段契约",
+      "mitigation": "异常捕获→None;单测锁定契约",
       "status": "mitigated"
     },
     {
       "id": "R-3",
-      "desc": "天气关键词误命中(如'温度对电池影响')导致该搜索的问题走了天气直查",
+      "desc": "天气关键词误命中",
       "prob": "低",
       "impact": "低",
-      "mitigation": "命中后取不到城市仍回退普通搜索;关键词表保守",
+      "mitigation": "取不到数据仍回退;词表保守",
       "status": "mitigated"
     },
     {
       "id": "R-4",
-      "desc": "实现先于门禁产生(迁移遗留),文档与代码可能漂移",
+      "desc": "实现先于门禁(迁移遗留),文档↔代码漂移",
       "prob": "中",
       "impact": "中",
-      "mitigation": "execute 阶段逐条 AC 校对+全量单测;漂移即修",
+      "mitigation": "execute 逐 AC 校对+全量单测",
       "status": "open"
+    },
+    {
+      "id": "R-5",
+      "desc": "同步 HTTP 最坏10s×3城市阻塞",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "城市≤3/超时10s/失败即弃",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-6",
+      "desc": "城市名拼入URL注入面",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "quote()编码;不收任意URL",
+      "status": "mitigated"
     }
   ],
   "repo": {
@@ -108,5 +101,5 @@
     "last_pushed_commit": "9166897e",
     "push_pending": false
   },
-  "updated_at": "2026-09-08T23:24:00+08:00"
+  "updated_at": "2026-09-08T23:29:00+08:00"
 }

@@ -65,9 +65,8 @@ def _to_cities(query: str) -> List[str]:
     for word in re.findall(r"(?<![A-Za-z])([A-Z][a-z]{2,})(?![a-z])", rest):
         if word not in {"Today", "Tomorrow", "Weather"}:
             cities.append(word)
-    if not cities:
-        # 未识别到城市：可能是"今天天气怎么样"，用 IP 定位（wttr.in 空路径）
-        cities.append("")
+    # 未识别到城市不做 IP 定位（服务端出口 IP 会误报服务器城市，D-004），
+    # 返回空 → 调用方按未命中回退普通搜索
     return list(dict.fromkeys(cities))[:3]
 
 

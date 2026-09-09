@@ -33,7 +33,7 @@ class TestWeatherDetect:
         assert _to_cities("看下今天北京的天气") == ["Beijing"]
         assert _to_cities("上海和北京天气") == ["Shanghai", "Beijing"]
         assert _to_cities("Paris weather") == ["Paris"]
-        assert _to_cities("今天天气怎么样") == [""]  # 无城市 → IP 定位
+        assert _to_cities("今天天气怎么样") == []  # 无城市 → 不 IP 定位,回退搜索(D-004)
 
 
 class TestWeatherFetch:
@@ -61,6 +61,14 @@ class TestWeatherFetch:
         monkeypatch.setattr("core.weather.requests.get",
                             lambda *a, **kw: called.append(1))
         assert get_weather_context("今天新闻") is None
+        assert not called
+
+    def test_no_city_returns_none_without_request(self, monkeypatch):
+        """D-004: 天气问法但无城市 → None 且不发网络请求(不做 IP 定位)"""
+        called = []
+        monkeypatch.setattr("core.weather.requests.get",
+                            lambda *a, **kw: called.append(1))
+        assert get_weather_context("今天天气怎么样") is None
         assert not called
 
     def test_network_fail_returns_none(self, monkeypatch):

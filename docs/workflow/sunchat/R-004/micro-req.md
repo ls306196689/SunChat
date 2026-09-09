@@ -1,6 +1,6 @@
 # R-004 session_id 严格校验 + 日志轮转
 
-需求: R-004 | 类型: bugfix+iteration(micro) | 状态: confirmed | 日期: 2026-09-09
+需求: R-004 | 类型: bugfix+iteration(micro) | 状态: done | 日期: 2026-09-09
 > 门禁按用户总授权"直接执行"直通(2026-09-08),confirmed_by=user(delegated)。
 
 ## 修订记录
@@ -57,5 +57,15 @@ raise HTTPException(400);两调用点替换(删除原 try/else-1 分支)。logge
 |---|---|---|
 | 1 | 两路由 400 化 + logger 轮转 + 回归单测 | 验证: `pytest tests/test_session_validation.py -q && pytest tests/ -q` |
 
-## 越界自检
-- [x] ≤3 文件 [x] 合法请求接口行为不变 [x] 无新架构决策(标准库 logging) [x] 新依赖:无
+## 验收对照(done 2026-09-10)
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 | 通过(单测+实机) | TestClient:非法 "abc"/空→400 且 spy 断言 service 未调用;实机 `/chat/messages` abc→`{"detail":"session_id 非法"}`,`/chat/stream` abc→400 |
+| AC-2 | 通过 | test_post_valid_session_ok:spy 收到 session_id==77→200 |
+| AC-3 | 通过 | 轮转单测 tmp 隔离(maxBytes 触发→`.1` 备份;40 天前清理/新文件保留);服务启动加载 `_cleanup_old_logs`(现存最旧 18 天,正确未删) |
+| AC-4 | 通过 | `pytest tests/` → **170 passed, 1 skipped**;实机 health 200 |
+提交: 本次 feat(R-004/step-1)(含 push,敏感自检误命中 `tokens_used` 测试字段,人工复核非凭据放行,已登记 skill issue)。
+
+## 越界自检终核
+- [x] 3 文件(chat 路由/logger/新增测试) [x] 合法请求 200 行为不变 [x] 无架构决策(标准库) [x] 无新依赖
+

@@ -1,0 +1,79 @@
+{
+  "req_id": "R-004",
+  "req_type": "bugfix",
+  "base_requirements": [
+    "R-003"
+  ],
+  "project": "sunchat",
+  "phase": "done",
+  "gates": [
+    {
+      "gate": "change_confirmed",
+      "at": "2026-09-09T00:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通"
+    },
+    {
+      "gate": "micro_design_confirmed",
+      "at": "2026-09-09T00:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通"
+    }
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "两路由400化+logger轮转+回归单测",
+      "module": "routes/logger",
+      "status": "done",
+      "verified": true
+    }
+  ],
+  "analyses": [
+    {
+      "id": "A-1",
+      "topic": "session_id校验语义不一致",
+      "conclusion": "统一400完成",
+      "evidence_count": 4,
+      "status": "confirmed"
+    },
+    {
+      "id": "A-2",
+      "topic": "日志无限增长",
+      "conclusion": "轮转+30天清理完成",
+      "evidence_count": 2,
+      "status": "confirmed"
+    }
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "合法数字session行为变更",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "spy回归+实机200复测",
+      "status": "closed"
+    },
+    {
+      "id": "R-2",
+      "desc": "清理误删近期日志",
+      "prob": "低",
+      "impact": "高",
+      "mitigation": "30天阈值+测试tmp隔离+实机核对最旧18天保留",
+      "status": "closed"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "step-1 已推",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-10T00:50:00+08:00"
+}

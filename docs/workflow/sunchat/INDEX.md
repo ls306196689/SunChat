@@ -1,6 +1,6 @@
 # sunchat 需求台账
 
-当前需求 ID:R-004(下一个将分配) | 设计基线:见 baseline.md
+当前需求 ID:R-005(下一个将分配) | 设计基线:见 baseline.md
 
 ## 需求历史
 | ID | 主题 | 类型 | 状态 | 基线修订 | 起止日期 |
@@ -15,3 +15,4 @@
 | R-001 | 天气直查(wttr.in 数据源+对话直查+Agent get_weather 工具) | feature | done | weather-core/chat-direct-weather | 2026-09-08 |
 | R-002 | Agent 工具框架 user_id 注入缺陷修复 | bugfix | done | - | 2026-09-08 |
 | R-003 | 直查短路补全(行情)+/health 探活缓存 | iteration | done | - | 2026-09-08 |
+| R-004 | session_id 统一400校验+日志轮转与30天清理 | bugfix | done | - | 2026-09-09~10 |

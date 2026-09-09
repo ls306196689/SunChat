@@ -8,17 +8,42 @@
   "clarifications": [],
   "modules": [],
   "steps": [
-    { "id": 1, "title": "execute_tool 注入条件化 + 回归单测", "module": "agent-tools", "status": "pending", "verified": false }
+    {
+      "id": 1,
+      "title": "execute_tool 注入条件化 + 回归单测",
+      "module": "agent-tools",
+      "status": "pending",
+      "verified": false
+    }
   ],
   "analyses": [
-    { "id": "A-1", "topic": "execute_tool 无条件注入 user_id 致 web_search 必然失败", "conclusion": "根因确认:A-1/C1-C2,S8(d73a499f)设计疏漏,注入未区分工具签名", "evidence_count": 5, "status": "confirmed" }
+    {
+      "id": "A-1",
+      "topic": "execute_tool 无条件注入 user_id 致 web_search 必然失败",
+      "conclusion": "根因确认:A-1/C1-C2,S8(d73a499f)设计疏漏,注入未区分工具签名",
+      "evidence_count": 5,
+      "status": "confirmed"
+    }
   ],
   "requirements_version": 1,
   "change_count": 0,
   "escalated_from_micro": false,
   "risks": [
-    { "id": "R-1", "desc": "inspect.signature 对 functools.wraps 包装函数取到的签名与原函数不一致导致误判", "prob": "低", "impact": "低", "mitigation": "wraps 保留 __wrapped__,inspect 默认可穿透;单测覆盖 memory_search(wrapped)注入仍生效", "status": "open" }
+    {
+      "id": "R-1",
+      "desc": "inspect.signature 对 functools.wraps 包装函数取到的签名与原函数不一致导致误判",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "wraps 保留 __wrapped__,inspect 默认可穿透;单测覆盖 memory_search(wrapped)注入仍生效",
+      "status": "open"
+    }
   ],
-  "repo": { "created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9", "push_pending": true },
-  "updated_at": "2026-09-08T23:17:30+08:00"
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "9166897e",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-08T23:19:30+08:00"
 }

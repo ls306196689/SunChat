@@ -3,24 +3,110 @@
   "req_type": "feature",
   "base_requirements": [],
   "project": "sunchat",
-  "phase": "clarify",
-  "gates": [],
+  "phase": "architecture",
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-08T23:24:00+08:00",
+      "confirmed_by": "user",
+      "note": "FR1-5/AC1-5冻结,D-001~005"
+    }
+  ],
   "clarifications": [
-    { "id": 1, "question": "未收录天气描述词透传英文原文,可接受还是需补翻译?", "resolution": null, "status": "open" },
-    { "id": 2, "question": "未指明城市时 wttr.in 服务端 IP 定位(非用户城市),可接受?", "resolution": null, "status": "open" },
-    { "id": 3, "question": "天气直查失败回退策略:回退 DDG(现状) vs 直接告知不可用?", "resolution": null, "status": "open" }
+    {
+      "id": 1,
+      "question": "未收录天气描述词透传英文原文,可接受还是需补翻译?",
+      "resolution": "透传英文原文,交LLM归纳翻译(D-003)",
+      "status": "closed"
+    },
+    {
+      "id": 2,
+      "question": "未指明城市时 wttr.in 服务端 IP 定位(非用户城市),可接受?",
+      "resolution": "未识别城市不做IP定位,视为未命中回退DDG;需改 _to_cities 现状(D-004)",
+      "status": "closed"
+    },
+    {
+      "id": 3,
+      "question": "天气直查失败回退策略:回退 DDG(现状) vs 直接告知不可用?",
+      "resolution": "直查失败回退DDG,保留现状(D-005)",
+      "status": "closed"
+    }
   ],
   "modules": [],
-  "steps": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "core/weather.py 天气直查模块+中文描述表+单测",
+      "module": "M1",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 2,
+      "title": "chat_service 对话路径直查优先接入+单测",
+      "module": "M2",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 3,
+      "title": "agent tools 注册 get_weather+实机SSE抽查",
+      "module": "M1",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 4,
+      "title": "_to_cities 去掉 IP 定位回退(D-004)+回归测试调整",
+      "module": "M1",
+      "status": "pending",
+      "verified": false
+    }
+  ],
   "analyses": [],
   "requirements_version": 1,
   "change_count": 0,
   "escalated_from_micro": false,
   "risks": [
-    { "id": "R-1", "desc": "wttr.in 公共免费服务不稳定/限流,天气直查随机失败", "prob": "中", "impact": "中", "mitigation": "失败返回 None 自动回退 DDG;超时 10s 快速失败", "status": "mitigated" },
-    { "id": "R-2", "desc": "wttr.in 响应格式变更导致解析失败", "prob": "低", "impact": "中", "mitigation": "解析异常捕获→None→回退;单测锁定字段契约", "status": "mitigated" },
-    { "id": "R-3", "desc": "天气关键词误命中(如'温度对电池影响')导致该搜索的问题走了天气直查", "prob": "低", "impact": "低", "mitigation": "命中后取不到城市仍回退普通搜索;关键词表保守", "status": "mitigated" }
+    {
+      "id": "R-1",
+      "desc": "wttr.in 公共免费服务不稳定/限流,天气直查随机失败",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "失败返回 None 自动回退 DDG;超时 10s 快速失败",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-2",
+      "desc": "wttr.in 响应格式变更导致解析失败",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "解析异常捕获→None→回退;单测锁定字段契约",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-3",
+      "desc": "天气关键词误命中(如'温度对电池影响')导致该搜索的问题走了天气直查",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "命中后取不到城市仍回退普通搜索;关键词表保守",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-4",
+      "desc": "实现先于门禁产生(迁移遗留),文档与代码可能漂移",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "execute 阶段逐条 AC 校对+全量单测;漂移即修",
+      "status": "open"
+    }
   ],
-  "repo": { "created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "d1002900c301ae525eb6cf51ba8599eb92ac24b9", "push_pending": true },
-  "updated_at": "2026-09-08T23:17:30+08:00"
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "9166897e",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-08T23:24:00+08:00"
 }

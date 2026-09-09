@@ -5,7 +5,7 @@
     "R-002"
   ],
   "project": "sunchat",
-  "phase": "execute",
+  "phase": "done",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -69,29 +69,29 @@
       "id": 1,
       "title": "_to_cities 去除 IP 定位回退(D-004)+单测",
       "module": "weather-core",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 2,
       "title": "AC-1/2 校验:识别与解析契约",
       "module": "weather-core",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 3,
       "title": "AC-3 校验:工具注册+执行(依赖R-002)",
       "module": "chat-direct-weather",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 4,
       "title": "AC-4 实机抽查+AC-5 全量回归",
       "module": "集成",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     }
   ],
   "analyses": [],
@@ -129,7 +129,7 @@
       "prob": "中",
       "impact": "中",
       "mitigation": "execute 逐 AC 校对+全量单测",
-      "status": "open"
+      "status": "closed"
     },
     {
       "id": "R-5",
@@ -155,5 +155,5 @@
     "last_pushed_commit": "9166897e",
     "push_pending": false
   },
-  "updated_at": "2026-09-08T23:35:00+08:00"
+  "updated_at": "2026-09-08T23:50:00+08:00"
 }

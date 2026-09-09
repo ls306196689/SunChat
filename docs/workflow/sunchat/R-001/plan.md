@@ -17,3 +17,17 @@
 
 ## 自检
 - 顺序 1→2→3→4 无环;清单无全仓浏览;高危 R-4 对应"逐 AC 校验+全量单测"步骤 2–4。
+
+## 总结(done 2026-09-08)
+### 验收对照
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 | 通过 | pytest TestWeatherDetect(识别4例) |
+| AC-2 | 通过 | TestWeatherFetch(解析/失败/HTTP错/无城市不回退,mock) |
+| AC-3 | 通过 | TestAgentTool(注册+执行+user_id不泄漏) |
+| AC-4 | 通过 | 实机 `/chat/stream` "今天北京天气怎么样":sources=[wttr-in],答含 19°C/26°C/17°C 实时数字(2026-09-08 23:47) |
+| AC-5 | 通过 | `pytest tests/ -q`→**160 passed, 1 skipped** |
+### 风险终态
+R-1 mitigated(限流回退实测有效) R-2 mitigated(契约单测) R-3 mitigated R-4 closed(逐AC校对完成,文档↔代码一致) R-5 mitigated R-6 mitigated
+### commit 范围
+9166897e(实现,随迁移) → 计划/设计文档提交 → fix(R-002/step-1) → feat(R-001/step-1) → archive

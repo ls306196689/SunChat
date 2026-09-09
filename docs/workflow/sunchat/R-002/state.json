@@ -3,7 +3,7 @@
   "req_type": "bugfix",
   "base_requirements": [],
   "project": "sunchat",
-  "phase": "micro_execute",
+  "phase": "done",
   "gates": [
     {
       "gate": "change_confirmed",
@@ -19,8 +19,8 @@
       "id": 1,
       "title": "execute_tool 注入条件化 + 回归单测",
       "module": "agent-tools",
-      "status": "in_progress",
-      "verified": false
+      "status": "done",
+      "verified": true
     }
   ],
   "analyses": [
@@ -42,7 +42,7 @@
       "prob": "低",
       "impact": "低",
       "mitigation": "wraps 保留 __wrapped__,inspect 默认可穿透;单测覆盖 memory_search(wrapped)注入仍生效",
-      "status": "open"
+      "status": "closed"
     }
   ],
   "repo": {
@@ -52,5 +52,5 @@
     "last_pushed_commit": "9166897e",
     "push_pending": false
   },
-  "updated_at": "2026-09-08T23:37:00+08:00"
+  "updated_at": "2026-09-08T23:41:00+08:00"
 }

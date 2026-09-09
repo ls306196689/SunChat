@@ -1,6 +1,6 @@
 # R-002 Agent 工具框架无条件注入 user_id 导致无该形参的工具必然失败
 
-需求: R-002 | 类型: bugfix | 状态: confirmed | 日期: 2026-09-08
+需求: R-002 | 类型: bugfix | 状态: done | 日期: 2026-09-08
 
 ## 修订记录
 | 版本 | 日期 | 变更 | 触发 |
@@ -56,3 +56,11 @@ pop 掉 LLM 传入的 user_id 后,检查 `td.function` 签名:`user_id` 在参�
 ## 越界自检(执行中每轮核对)
 - [x] 仍 ≤3 文件(1 文件+测试) [x] 未改对外接口 [x] 无新架构决策 [x] 修复失败 <2 次
 > 任一失守 → 立即停止,escalated,state.escalated_from_micro=true,phase→expand。
+
+## 验收对照(done 2026-09-08)
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 | 通过 | tests/test_weather.py::TestAgentTool::test_execute_tool_no_user_id_injection;伪造 user_id=999 丢弃 |
+| AC-2 | 通过 | test_signed_tool_user_id_injection_not_regressed:memory_search 注入值=会话 user_id |
+| AC-3 | 通过 | `pytest tests/ -q` 159 passed, 1 skipped |
+提交范围: 9166897e(修复实现,随迁移) → 本步提交(回归用例)。风险 R-1(inspect 穿透 wraps)未成真,置 closed。

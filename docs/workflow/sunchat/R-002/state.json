@@ -3,8 +3,15 @@
   "req_type": "bugfix",
   "base_requirements": [],
   "project": "sunchat",
-  "phase": "micro_draft",
-  "gates": [],
+  "phase": "micro_execute",
+  "gates": [
+    {
+      "gate": "change_confirmed",
+      "at": "2026-09-08T23:37:00+08:00",
+      "confirmed_by": "user",
+      "note": "方案:签名探测注入;影响1文件+测试"
+    }
+  ],
   "clarifications": [],
   "modules": [],
   "steps": [
@@ -12,7 +19,7 @@
       "id": 1,
       "title": "execute_tool 注入条件化 + 回归单测",
       "module": "agent-tools",
-      "status": "pending",
+      "status": "in_progress",
       "verified": false
     }
   ],
@@ -45,5 +52,5 @@
     "last_pushed_commit": "9166897e",
     "push_pending": false
   },
-  "updated_at": "2026-09-08T23:19:30+08:00"
+  "updated_at": "2026-09-08T23:37:00+08:00"
 }

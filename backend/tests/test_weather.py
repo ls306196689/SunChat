@@ -99,3 +99,18 @@ class TestAgentTool:
                             lambda *a, **kw: Resp())
         r = execute_tool("get_weather", {"city": "北京", "user_id": 999}, user_id=1)
         assert r.success and "Beijing" in r.data
+
+    def test_signed_tool_user_id_injection_not_regressed(self, monkeypatch):
+        """R-002/AC-2: 签名接受 user_id 的工具(memory_search)仍强制注入会话 user_id,
+        LLM 伪造的 user_id 一律丢弃,防越权不回退。"""
+        from core.agent.tools import execute_tool
+
+        captured = {}
+
+        def fake_search_memories(user_id=None, query=None, top_k=5):
+            captured["user_id"] = user_id
+            return []
+        monkeypatch.setattr("core.agent.tools.memory_service.search_memories",
+                            fake_search_memories)
+        execute_tool("memory_search", {"query": "x", "user_id": 999}, user_id=42)
+        assert captured["user_id"] == 42

@@ -6,7 +6,9 @@ SunChat Backend - Weather Service
 调用方回退普通搜索。
 """
 import re
-from typing import Dict, List, Optional
+import threading
+import time
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 import requests
@@ -99,12 +101,41 @@ def _format_city(city: str, data: Dict) -> Optional[str]:
         return None
 
 
+_CACHE_TTL = 600  # R-007: 城市级结果缓存秒数（天气小时级变化,追问场景免重复拉取）
+_city_cache: Dict[str, Tuple[float, str]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_get(city: str) -> Optional[str]:
+    with _cache_lock:
+        hit = _city_cache.get(city)
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL:
+        return hit[1]
+    return None
+
+
+def _cache_put(city: str, text: str) -> None:
+    with _cache_lock:
+        _city_cache[city] = (time.monotonic(), text)
+
+
+def clear_weather_cache() -> None:
+    """测试用:清空城市缓存。"""
+    with _cache_lock:
+        _city_cache.clear()
+
+
 def get_weather_context(query: str) -> Optional[str]:
-    """天气类问题 → 给 LLM 的天气上下文文本；非天气/取不到 → None。"""
+    """天气类问题 → 给 LLM 的天气上下文文本；非天气/取不到 → None。
+    R-007: 城市级 TTL 缓存(仅成功入缓存,失败下次重试)。"""
     if not is_weather_query(query):
         return None
     parts: List[str] = []
     for city in _to_cities(query):
+        cached = _cache_get(city)
+        if cached is not None:
+            parts.append(cached)
+            continue
         try:
             resp = requests.get(f"https://wttr.in/{quote(city)}?format=j1",
                                 headers=_HEADERS, timeout=_TIMEOUT)
@@ -113,6 +144,7 @@ def get_weather_context(query: str) -> Optional[str]:
                 continue
             text = _format_city(city, resp.json())
             if text:
+                _cache_put(city, text)
                 parts.append(text)
         except Exception as e:
             logger.warning(f"[WEATHER] wttr.in 请求失败 city={city}: {e}")

@@ -6,8 +6,9 @@ SunChat Backend - Stock Quote Service
 东方财富 push2 作备源。识别不到代码或全部失败 → 返回 None，调用方回退普通搜索。
 """
 import re
+import threading
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -120,13 +121,42 @@ def _fetch_tencent(symbols: List[str]) -> List[Dict]:
     return quotes
 
 
+_CACHE_TTL = 60  # R-007: 行情结果缓存秒数（对话场景免重复打腾讯API,同 R-003/R-006 TTL 模式）
+_quote_cache: Dict[Tuple[str, ...], Tuple[float, str]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_get(key: Tuple[str, ...]) -> Optional[str]:
+    with _cache_lock:
+        hit = _quote_cache.get(key)
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL:
+        return hit[1]
+    return None
+
+
+def _cache_put(key: Tuple[str, ...], text: str) -> None:
+    with _cache_lock:
+        _quote_cache[key] = (time.monotonic(), text)
+
+
+def clear_stock_cache() -> None:
+    """测试用:清空行情缓存。"""
+    with _cache_lock:
+        _quote_cache.clear()
+
+
 def get_stock_context(query: str) -> Optional[str]:
-    """股价类问题 → 给 LLM 的行情上下文文本；非股价/识别不到/取不到 → None。"""
+    """股价类问题 → 给 LLM 的行情上下文文本；非股价/识别不到/取不到 → None。
+    R-007: symbols 级 TTL 缓存(仅成功入缓存,失败下次重试)。"""
     if not is_stock_query(query):
         return None
     symbols = _to_symbols(query)
     if not symbols:
         return None
+    key = tuple(symbols)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
     try:
         quotes = _fetch_tencent(symbols)
     except Exception as e:
@@ -143,4 +173,6 @@ def get_stock_context(query: str) -> Optional[str]:
             f"最高 {q['high'] or '?'} 最低 {q['low'] or '?'}（行情时间 {q['time']}）"
         )
     header = "实时行情数据（腾讯行情，可直接引用给用户，这就是具体价格）："
-    return header + "\n" + "\n".join(lines)
+    text = header + "\n" + "\n".join(lines)
+    _cache_put(key, text)
+    return text

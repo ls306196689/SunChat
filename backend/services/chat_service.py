@@ -24,8 +24,14 @@ from utils.logger import chat_logger, memory_logger, logger
 class ChatService(DBSessionMixin):
     """聊天服务（db 属性见 DBSessionMixin：线程本地 Session）"""
 
+    # R-007: 记忆提取有界池（实例级惰性；上限可在测试覆盖）
+    _extract_workers = 2
+    _extract_max_inflight = 8
+
     def __init__(self):
-        pass
+        self._extract_lock = threading.Lock()
+        self._extract_inflight = 0
+        self._extract_pool = None
 
     def create_session(self, user_id: int, title: str = None) -> Dict:
         """创建会话"""
@@ -387,7 +393,8 @@ AI 回答: {ai_response}
     def extract_memories_async(self, user_id: int, content: str,
                                response_content: str,
                                memory_context: List[Dict]):
-        """后台守护线程执行记忆提取，不阻塞响应；失败只记日志。"""
+        """R-007: 有界线程池执行记忆提取（max_workers=2,在途≤8）,不阻塞响应；
+        超限丢弃记 WARNING（主链路优先,记忆可后补）;失败只记日志。"""
         def _job():
             try:
                 self.apply_memory_extraction(user_id, content, response_content,
@@ -401,10 +408,22 @@ AI 回答: {ai_response}
                     reset_thread_session()
                 except Exception:
                     pass
+                with self._extract_lock:
+                    self._extract_inflight -= 1
 
-        t = threading.Thread(target=_job, name="memory-extractor", daemon=True)
-        t.start()
-        return t
+        with self._extract_lock:
+            if self._extract_inflight >= self._extract_max_inflight:
+                logger.warning(
+                    f"[CHAT] 记忆提取队列已满(在途{self._extract_inflight}),"
+                    f"本条丢弃 - user:{user_id}")
+                return None
+            self._extract_inflight += 1
+            if self._extract_pool is None:
+                from concurrent.futures import ThreadPoolExecutor
+                self._extract_pool = ThreadPoolExecutor(
+                    max_workers=self._extract_workers,
+                    thread_name_prefix="memory-extractor")
+            return self._extract_pool.submit(_job)
 
     def process_message(self, user_id: int, session_id: int, content: str,
                        memory_enabled: bool = True, search_enabled: bool = True,

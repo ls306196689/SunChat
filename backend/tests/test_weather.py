@@ -5,6 +5,8 @@ import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.weather import is_weather_query, _to_cities, get_weather_context
@@ -37,6 +39,14 @@ class TestWeatherDetect:
 
 
 class TestWeatherFetch:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        # R-007: 城市级TTL缓存引入跨用例状态,失败类用例需纯净缓存态
+        from core.weather import clear_weather_cache
+        clear_weather_cache()
+        yield
+        clear_weather_cache()
+
     def test_parse_wttr(self, monkeypatch):
         calls = []
 

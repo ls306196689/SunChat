@@ -43,6 +43,14 @@ class TestStockDetect:
 
 
 class TestStockFetch:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        # R-007: symbols级TTL缓存引入跨用例状态,失败类用例需纯净缓存态
+        from core.stock import clear_stock_cache
+        clear_stock_cache()
+        yield
+        clear_stock_cache()
+
     def test_parse_tencent_quote(self, monkeypatch):
         class Resp:
             status_code = 200

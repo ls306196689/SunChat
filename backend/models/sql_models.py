@@ -237,7 +237,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False, index=True)  # R-007: 会话列表按用户过滤
     title = Column(String(255))
     summary = Column(Text)
     is_pinned = Column(Boolean, default=False)
@@ -251,12 +251,12 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(Integer, nullable=False)
+    session_id = Column(Integer, nullable=False, index=True)  # R-007: 最热查询-按会话过滤
     role = Column(String(20), nullable=False)  # user, assistant, system, tool
     content = Column(Text, nullable=False)
     raw_response = Column(Text)  # LLM 原始响应
     tokens_used = Column(Integer, default=0)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=func.now(), index=True)  # R-007: 消息排序分页
 
 
 class Memory(Base):
@@ -264,7 +264,7 @@ class Memory(Base):
     __tablename__ = "memories"
 
     id = Column(String(100), primary_key=True)  # mem_uuid
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False, index=True)  # R-007: 记忆列表按用户过滤
     type = Column(String(20), nullable=False)  # semantic, episodic, working
     category = Column(String(50))
     content = Column(Text, nullable=False)
@@ -321,7 +321,7 @@ class KBChunk(Base):
     __tablename__ = "kb_chunks"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    file_id = Column(Integer, nullable=False)
+    file_id = Column(Integer, nullable=False, index=True)  # R-007: KB检索按文件JOIN
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     vector_id = Column(String(100), nullable=False)
@@ -335,7 +335,7 @@ class SearchHistory(Base):
     __tablename__ = "search_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, nullable=False)
+    user_id = Column(Integer, nullable=False, index=True)  # R-007: 搜索历史按用户过滤
     query = Column(Text, nullable=False)
     intent = Column(String(50))  # general, academic, news, code
     results_count = Column(Integer, default=0)
@@ -365,6 +365,19 @@ def ensure_schema():
     if "memories" in tables:
         with eng.begin() as conn:
             conn.execute(text("UPDATE memories SET category = 'habit' WHERE category = 'habbit'"))
+
+    # R-007: 存量库幂等补齐热列索引（新库由模型 index=True 自动建，IF NOT EXISTS 双保险）
+    _HOT_INDEXES = [
+        ("messages", "idx_messages_session_id_created_at", "(session_id, created_at)"),
+        ("chat_sessions", "idx_chat_sessions_user_id", "(user_id)"),
+        ("memories", "idx_memories_user_id_is_active", "(user_id, is_active)"),
+        ("kb_chunks", "idx_kb_chunks_file_id", "(file_id)"),
+        ("search_history", "idx_search_history_user_id", "(user_id)"),
+    ]
+    for table, name, cols in _HOT_INDEXES:
+        if table in tables:
+            with eng.begin() as conn:
+                conn.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table}{cols}"))
 
 
 def init_db():

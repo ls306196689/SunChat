@@ -80,5 +80,18 @@ AC-6 全量 pytest。
 - [D-102] 2026-09-11 agent 空 session_id 保留无会话模式: 属既有合法语义(无状态
   Agent 调用),仅"非空非法"才 400,避免破坏现用法。
 
-## 归档结果
-(执行后回填)
+## 归档结果(2026-09-11)
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 | 通过 | test_get_invalid_session_400:abc→400 且 spy 空(修复前 red:500) |
+| AC-2 | 通过 | test_get_page_zero_422 / test_get_page_size_over_limit_422:422 且 spy 空 |
+| AC-3 | 通过 | agent abc→400 不落库(原 200 静默);空/缺省→200 无会话(D-102) |
+| AC-4 | 通过 | GET 7→200 spy session_id==7;agent "9"→save(user,9)+(asst,9);边界 1/100 合法 |
+| AC-5 | 通过 | 删 dependencies.py/routes/deps.py/app/v1 后 `import app.main` OK |
+| AC-6 | 通过 | `pytest tests/` → **179 passed, 1 skipped**(基线 170+9 新增);R-004 既有用例无回归 |
+
+风险终态:R-1 mitigated(前端 grep 仅真实 id;空 id 放行)、R-2 closed(全量无断言冲突)。
+commit 范围:fix(R-005/step-1) + chore(R-005/step-2) + docs(R-005) archive。
+基线:未触碰 design/ 在册模块行为(session 契约为路由面,R-004 先例不回写)。
+越界自检:改动 ≤3 文件、未改合法路径接口、无新架构决策——micro 通道守界。
+

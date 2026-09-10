@@ -5,7 +5,7 @@
     "R-004"
   ],
   "project": "sunchat",
-  "phase": "micro_execute",
+  "phase": "done",
   "gates": [
     {
       "gate": "change_confirmed",
@@ -27,15 +27,15 @@
       "id": 1,
       "title": "red test + GET400/分页限幅 + agent非法400",
       "module": "routes/chat+agent",
-      "status": "in_progress",
-      "verified": false
+      "status": "done",
+      "verified": true
     },
     {
       "id": 2,
       "title": "死文件清理(dependencies.py/deps.py/app-v1)",
       "module": "repo-hygiene",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     }
   ],
   "analyses": [
@@ -65,7 +65,7 @@
       "prob": "低",
       "impact": "低",
       "mitigation": "step-1 全量 pytest 核对,必要处按新契约修正断言并注明 R-005",
-      "status": "open"
+      "status": "closed"
     }
   ],
   "repo": {
@@ -75,5 +75,5 @@
     "last_pushed_commit": "3cfbf864",
     "push_pending": false
   },
-  "updated_at": "2026-09-11T00:10:00+08:00"
+  "updated_at": "2026-09-11T00:08:00+08:00"
 }

@@ -31,9 +31,12 @@ def agent_chat(request: AgentRequest):
             raise HTTPException(status_code=400, detail=reason)
 
         user_id = settings.LOCAL_USER_ID
+        # R-005: 非空非法 session_id 一律 400(禁止静默丢失历史);空/缺省 = 无会话模式
         session_id = None
         history = None
-        if request.session_id and request.session_id.isdigit():
+        if request.session_id:
+            if not request.session_id.isdigit():
+                raise HTTPException(status_code=400, detail="session_id 非法")
             session_id = int(request.session_id)
             history = chat_service.get_recent_messages(session_id)
 

@@ -1,0 +1,79 @@
+{
+  "req_id": "R-005",
+  "req_type": "bugfix",
+  "base_requirements": [
+    "R-004"
+  ],
+  "project": "sunchat",
+  "phase": "micro_execute",
+  "gates": [
+    {
+      "gate": "change_confirmed",
+      "at": "2026-09-11T00:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通(用户:默认全部允许,按最优选择执行);范围=体检提案A组"
+    },
+    {
+      "gate": "micro_design_confirmed",
+      "at": "2026-09-11T00:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;D-101 分页422/D-102 agent空id保留无会话"
+    }
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "red test + GET400/分页限幅 + agent非法400",
+      "module": "routes/chat+agent",
+      "status": "in_progress",
+      "verified": false
+    },
+    {
+      "id": 2,
+      "title": "死文件清理(dependencies.py/deps.py/app-v1)",
+      "module": "repo-hygiene",
+      "status": "pending",
+      "verified": false
+    }
+  ],
+  "analyses": [
+    {
+      "id": "A-1",
+      "topic": "session契约在GET/agent端点未收口",
+      "conclusion": "C1 GET非法id→500违反R-004契约;C2分页无校验;C3 agent静默丢失;C4测试盲区",
+      "evidence_count": 10,
+      "status": "confirmed"
+    }
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "前端若正依赖 agent 非法id静默无会话模式,改400后中断",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "grep frontend 仅用真实 session_id;空id仍放行",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-2",
+      "desc": "既有测试断言旧行为(500/静默)导致回归红",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "step-1 全量 pytest 核对,必要处按新契约修正断言并注明 R-005",
+      "status": "open"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "3cfbf864",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-11T00:10:00+08:00"
+}

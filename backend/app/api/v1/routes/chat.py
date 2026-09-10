@@ -8,7 +8,7 @@ SunChat Backend - Chat Route
 5. llm 返回记忆提取内容 以及 对用户输入信息的回复
 6. 本地服务更新记忆,如果有冲突以最新记忆为准
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Optional, AsyncGenerator
@@ -135,10 +135,12 @@ def create_session():
 
 
 @router.get("/chat/sessions/{session_id}/messages")
-def get_messages(session_id: str, page: int = 1, page_size: int = 20):
-    """获取消息历史"""
+def get_messages(session_id: str,
+                 page: int = Query(1, ge=1),
+                 page_size: int = Query(20, ge=1, le=100)):
+    """获取消息历史（R-005: session_id 统一400校验,分页限幅 page≥1/1≤page_size≤100）"""
     messages = chat_service.get_messages(
-        session_id=int(session_id),
+        session_id=_resolve_session_id(session_id),
         page=page,
         page_size=page_size
     )

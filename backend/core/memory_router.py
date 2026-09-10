@@ -83,8 +83,8 @@ class MemoryRouter:
         prompt = self._build_analysis_prompt(user_input, context)
 
         try:
-            # 调用LLM获取分析结果
-            response = ollama_service.generate(prompt)
+            # 调用LLM获取分析结果（R-006: 轻调用短超时,失败快速回退规则结论）
+            response = ollama_service.generate(prompt, timeout=settings.LLM_LIGHT_TIMEOUT)
 
             logger.debug(f"[MEMORY_ROUTER] LLM原始响应: {response[:500]}")
 

@@ -78,6 +78,7 @@ class OllamaService:
         stream: bool = False,
         model: Optional[str] = None,
         raise_on_error: bool = False,
+        timeout: Optional[int] = None,
     ):
         """
         生成文本。
@@ -85,6 +86,7 @@ class OllamaService:
         Args:
             raise_on_error: True 时失败抛异常（供需要明确错误的调用方）；
                             False 时失败返回 ""（保持既有兼容）。
+            timeout: R-006: 请求超时秒数,None 用 LLM_TIMEOUT 默认;轻调用传小值。
         Returns:
             非流式：str；流式：同步 generator。
         """
@@ -103,7 +105,7 @@ class OllamaService:
         if stream:
             def generate_stream() -> Generator[str, None, None]:
                 try:
-                    resp = _post(url, payload, stream=True)
+                    resp = _post(url, payload, timeout=timeout, stream=True)
                     resp.raise_for_status()
                     for line in resp.iter_lines():
                         if line:
@@ -122,7 +124,7 @@ class OllamaService:
             return generate_stream()
 
         try:
-            resp = _post(url, payload)
+            resp = _post(url, payload, timeout=timeout)
             resp.raise_for_status()
             result = resp.json()
             return result.get("message", {}).get("content", "")

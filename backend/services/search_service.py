@@ -6,6 +6,8 @@ from core.search import search_service
 from core.llm import ollama_service
 from utils.logger import logger
 
+_UNSET = object()  # R-006: 区分"未传"与"传了 None(已试且失败)"
+
 
 class SearchService:
     """搜索服务（封装 core.search）"""
@@ -31,7 +33,8 @@ class SearchService:
         return self.service.route_query(query, context)
 
     def search_with_introduction(self, query: str, memories: List[Dict] = None,
-                                  max_results: int = 5) -> Dict:
+                                  max_results: int = 5,
+                                  stock_context=_UNSET) -> Dict:
         """
         搜索并使用 LLM 归纳答案
 
@@ -39,17 +42,20 @@ class SearchService:
             query: 搜索查询
             memories: 用户记忆（用于上下文增强）
             max_results: 最大结果数
+            stock_context: R-006: 调用方已取的行情上下文(str 或 None=已试失败);
+                           缺省时自取,行为与旧版完全一致。显式传入不再重复请求行情 API。
 
         Returns:
             包含 answer 和 sources 的结构化响应
         """
         # 股价类问题：DDG 摘要拿不到实时价格，先直查行情 API 把具体数字喂给 LLM
-        stock_context = None
-        try:
-            from core.stock import get_stock_context
-            stock_context = get_stock_context(query)
-        except Exception as e:
-            logger.debug(f"[SEARCH] 行情直查跳过: {e}")
+        if stock_context is _UNSET:
+            try:
+                from core.stock import get_stock_context
+                stock_context = get_stock_context(query)
+            except Exception as e:
+                logger.debug(f"[SEARCH] 行情直查跳过: {e}")
+                stock_context = None
 
         # 路由查询并获取意图
         route_result = self.route_query(query, memories)

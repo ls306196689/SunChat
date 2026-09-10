@@ -270,10 +270,13 @@ AI 回答: {ai_response}
         if search_enabled:
             # 行情直查优先：股价类问题直接拿权威数字，不经 DDG/意图路由
             stock_hit = False
+            from services.search_service import _UNSET
+            _stock_probe = _UNSET  # R-006: 记录探测结果透传去重(None=已试失败)
             try:
                 from core.stock import is_stock_query, get_stock_context
                 if is_stock_query(content):
                     stock_ctx = get_stock_context(content)
+                    _stock_probe = stock_ctx
                     if stock_ctx:
                         stock_hit = True
                         system_prompt += f"\n\n{stock_ctx}\n请直接引用上述实时数字回答。"
@@ -281,6 +284,7 @@ AI 回答: {ai_response}
                             "title": "腾讯行情（实时数据）", "url": "https://gu.qq.com/",
                             "source": "tencent-quote", "snippet": stock_ctx, "score": 1.0})
             except Exception as e:
+                _stock_probe = None  # R-006: 异常同样计"已试失败",下游不再重复请求
                 logger.warning(f"[CHAT] 行情直查失败（忽略）: {e}")
 
             # 天气直查优先：wttr.in 实时数据，命中则不再走 DDG（更快更准）
@@ -303,7 +307,8 @@ AI 回答: {ai_response}
                             chat_router.route(content, context={"memories": memory_context}))
                 if decision.get("tool") == "search":
                     from services.search_service import search_svc
-                    summary = search_svc.search_with_introduction(content, memory_context)
+                    summary = search_svc.search_with_introduction(
+                        content, memory_context, stock_context=_stock_probe)
                     answer = summary.get("answer", "")
                     new_sources = summary.get("sources", [])
                     if answer and new_sources:

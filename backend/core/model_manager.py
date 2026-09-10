@@ -36,6 +36,10 @@ class ModelManager:
         self._available_cache: Optional[List[Dict]] = None
         self._available_ts: float = 0.0
         self._ttl = getattr(settings, "MODEL_CACHE_TTL", 30)
+        # R-006: is_available 结果 TTL 缓存（含失败结果），/health 轮询不再每次挂 3s
+        self._avail_flag: Optional[bool] = None
+        self._avail_ts: float = 0.0
+        self._avail_ttl = getattr(settings, "HEALTH_AVAIL_TTL", 30)
         # 运行时选择（持久化）
         self._chat_model_override: Optional[str] = None
         self._embedding_model_override: Optional[str] = None
@@ -111,13 +115,24 @@ class ModelManager:
         return self._available_cache or []
 
     def is_available(self) -> bool:
-        """Ollama 服务是否在线"""
+        """Ollama 服务是否在线（R-006: 结果缓存 HEALTH_AVAIL_TTL 秒,与 R-003 探活缓存同语义）"""
+        now = time.monotonic()
+        if self._avail_flag is not None and (now - self._avail_ts) < self._avail_ttl:
+            return self._avail_flag
         try:
             url = f"{settings.LLM_API_URL.rstrip('/')}/api/tags"
             resp = requests.get(url, timeout=3)
-            return resp.status_code == 200
+            val = resp.status_code == 200
         except Exception:
-            return False
+            val = False
+        self._avail_flag = val
+        self._avail_ts = now
+        return val
+
+    def invalidate_availability_cache(self) -> None:
+        """模型切换/测试用:强制下次 is_available 实探。"""
+        self._avail_flag = None
+        self._avail_ts = 0.0
 
     # ==================== 模型分类 ====================
 
@@ -212,6 +227,7 @@ class ModelManager:
         with self._lock:
             self._chat_model_override = name
             self._available_cache = None  # 强制刷新
+            self.invalidate_availability_cache()  # R-006
         self._save_config()
         logger.info(f"[MODEL] 聊天模型已切换为: {name}")
         return {"success": True, "chat_model": name}
@@ -232,6 +248,7 @@ class ModelManager:
         with self._lock:
             self._embedding_model_override = name
             self._available_cache = None
+            self.invalidate_availability_cache()  # R-006
         self._save_config()
         logger.info(f"[MODEL] 嵌入模型已切换为: {name}")
 

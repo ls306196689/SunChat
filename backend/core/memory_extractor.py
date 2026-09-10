@@ -56,8 +56,9 @@ class MemoryExtractor:
         prompt = self._build_extraction_prompt(user_input, ai_response, context_memories)
 
         try:
-            # 调用LLM
-            response = ollama_service.generate(prompt)
+            # 调用LLM（R-006: 后台提取轻调用短超时,失败走既有回退）
+            from app.config import settings as _s
+            response = ollama_service.generate(prompt, timeout=_s.LLM_LIGHT_TIMEOUT)
 
             logger.debug(f"[MEMORY_EXTRACTOR] LLM原始响应: {response[:500]}")
 

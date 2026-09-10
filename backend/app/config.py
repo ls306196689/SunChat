@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     LLM_API_URL: str = "http://localhost:11434"
     LLM_MODEL: str = "qwen2.5:7b"
     LLM_TIMEOUT: int = 300  # LLM 请求超时（秒），本地生成较慢
+    LLM_LIGHT_TIMEOUT: int = 20  # R-006: 路由/提取等轻量 LLM 调用短超时,失败快速回退
+    HEALTH_AVAIL_TTL: int = 30  # R-006: /health LLM 探活结果缓存秒数（同 R-003 DDG 模式）
 
     # 嵌入模型配置（bge-m3: 中文语义优于 nomic-embed-text, 决策 D-001;切换后需重建向量库）
     EMBEDDING_API_URL: str = "http://localhost:11434"

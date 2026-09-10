@@ -19,4 +19,4 @@
 | R-004 | session_id 统一400校验+日志轮转与30天清理 | bugfix | done | - | 2026-09-09~10 |
 | R-005 | session 契约收口(GET 400+分页限幅+Agent 非法 id 400+死文件清理) | bugfix | done | - | 2026-09-11 |
 | R-006 | 热路径延迟优化(去重复 LLM/行情调用+轻调用短超时+/health 缓存) | iteration | done | - | 2026-09-11 |
-| R-007 | 资源与数据层加固(DB 索引+记忆提取线程池+天气/行情 TTL 缓存) | iteration | planned | - | - |
+| R-007 | 资源与数据层加固(DB 索引+记忆提取线程池+天气/行情 TTL 缓存) | iteration | done | - | 2026-09-11 |

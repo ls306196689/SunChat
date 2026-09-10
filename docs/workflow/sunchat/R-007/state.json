@@ -1,0 +1,101 @@
+{
+  "req_id": "R-007",
+  "req_type": "iteration",
+  "base_requirements": [
+    "R-003",
+    "R-006"
+  ],
+  "project": "sunchat",
+  "phase": "done",
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-11T00:18:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通(用户2026-09-10明示默认全部允许);范围=体检提案C组"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-11T00:18:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;design-change无对外接口变化不回写基线"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-11T00:18:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;D-301~304"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-11T00:18:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;1步计划"
+    }
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "热列索引+提取有界池+天气/行情TTL缓存+test_resource_hardening",
+      "module": "models/sql_models.py,services/chat_service.py,core/weather.py,core/stock.py",
+      "status": "done",
+      "verified": true
+    }
+  ],
+  "analyses": [
+    {
+      "id": "A-1",
+      "topic": "资源与数据层加固点取证",
+      "conclusion": "C1热列无索引属实;C2裸线程无上限属实;C3天气/行情无TTL缓存属实",
+      "evidence_count": 7,
+      "status": "confirmed"
+    }
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "存量库启动建索引一次性开销/短暂锁",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "IF NOT EXISTS幂等+SQLite本地小库+启动期一次",
+      "status": "closed"
+    },
+    {
+      "id": "R-2",
+      "desc": "队列满丢弃提取(记忆静默缺失)",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "WARNING日志显式;上限类属性可调;主链路不损",
+      "status": "closed"
+    },
+    {
+      "id": "R-3",
+      "desc": "行情缓存最长60s旧价",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "对话场景可接受;staleness语义已在design-change声明",
+      "status": "closed"
+    },
+    {
+      "id": "R-4",
+      "desc": "池线程复用致thread-local Session残留",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "_job finally保留reset_thread_session;单测覆盖失败后inflight归零",
+      "status": "closed"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "136e63a0",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-11T00:26:00+08:00"
+}

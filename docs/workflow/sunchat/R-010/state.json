@@ -1,36 +1,100 @@
 {
   "req_id": "R-010",
   "req_type": "iteration",
-  "base_requirements": ["R-008", "R-009"],
+  "base_requirements": [
+    "R-008",
+    "R-009"
+  ],
   "project": "sunchat",
-  "phase": "execute",
+  "phase": "done",
   "gates": [
-    {"gate": "requirements_confirmed", "at": "2026-09-11T10:22:00+08:00", "confirmed_by": "user",
-     "note": "总授权直通(全模态三期第3期;视频抽帧复用图片通道)"},
-    {"gate": "architecture_confirmed", "at": "2026-09-11T10:22:00+08:00", "confirmed_by": "user",
-     "note": "总授权直通;帧即普通chat image,无新域"},
-    {"gate": "design_confirmed", "at": "2026-09-11T10:22:00+08:00", "confirmed_by": "user",
-     "note": "总授权直通;D-601~603"},
-    {"gate": "plan_confirmed", "at": "2026-09-11T10:22:00+08:00", "confirmed_by": "user",
-     "note": "总授权直通"}
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-11T10:22:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通(全模态三期第3期;视频抽帧复用图片通道)"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-11T10:22:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;帧即普通chat image,无新域"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-11T10:22:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;D-601~603"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-11T10:22:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通"
+    }
   ],
   "clarifications": [],
   "modules": [],
   "steps": [
-    {"id": 1, "title": "后端 core/video.py+抽帧端点+config+单测", "module": "backend", "status": "in_progress", "verified": false},
-    {"id": 2, "title": "前端 🎬 + 全量回归 + 归档", "module": "frontend", "status": "pending", "verified": false}
+    {
+      "id": 1,
+      "title": "后端 core/video.py+抽帧端点+config+单测",
+      "module": "backend",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 2,
+      "title": "前端 🎬 + 全量回归 + 归档",
+      "module": "frontend",
+      "status": "done",
+      "verified": true
+    }
   ],
   "analyses": [
-    {"id": "A-1", "topic": "视频抽帧管线可行性", "conclusion": "C1 av纯Python抽帧可行无需ffmpeg,帧复用R-008;C2 前端复用pendingImages零新链路", "evidence_count": 5, "status": "confirmed"}
+    {
+      "id": "A-1",
+      "topic": "视频抽帧管线可行性",
+      "conclusion": "C1 av纯Python抽帧可行无需ffmpeg,帧复用R-008;C2 前端复用pendingImages零新链路",
+      "evidence_count": 5,
+      "status": "confirmed"
+    }
   ],
   "requirements_version": 1,
   "change_count": 0,
   "escalated_from_micro": false,
   "risks": [
-    {"id": "R-1", "desc": "均匀抽帧错过关键内容", "prob": "中", "impact": "低", "mitigation": "N=4全部帧入窗口;用户可补截图", "status": "open"},
-    {"id": "R-2", "desc": "长视频解码慢", "prob": "中", "impact": "低", "mitigation": "seek只解目标帧+50MB上限", "status": "open"},
-    {"id": "R-3", "desc": "格式覆盖不全", "prob": "低", "impact": "中", "mitigation": "ftyp/avi/webm/flv白名单+av主流覆盖+失败明示", "status": "open"}
+    {
+      "id": "R-1",
+      "desc": "均匀抽帧错过关键内容",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "N=4全部帧入窗口;用户可补截图",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-2",
+      "desc": "长视频解码慢",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "seek只解目标帧+50MB上限",
+      "status": "mitigated"
+    },
+    {
+      "id": "R-3",
+      "desc": "格式覆盖不全",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "ftyp/avi/webm/flv白名单+av主流覆盖+失败明示",
+      "status": "mitigated"
+    }
   ],
-  "repo": {"created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "b15b6427", "push_pending": false},
-  "updated_at": "2026-09-11T10:22:00+08:00"
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "(archive)",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-11T10:35:00+08:00"
 }

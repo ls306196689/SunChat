@@ -28,3 +28,11 @@
 
 ## 遗留(后续需求候选)
 - 图片存储生命周期清理(R-2);agent 端点带图;(R-009 语音、R-010 视频为全模态分期)。
+
+## 附录:视频输入(R-010 追加)
+- `POST /api/v1/chat/video/frames`(multipart)→ `{data:{frame_ids, count, duration}}`:
+  魔数白名单 mp4/mov(ftyp)/avi(RIFF)/webm(EBML)/flv,≤VIDEO_MAX_MB(50);
+  PyAV 均匀采样 ≤VIDEO_MAX_FRAMES(4)(seek 只解目标帧,时长缺失降级顺序解码),
+  帧 JPEG q82 以 `{uuid}.jpg` 落 CHAT_IMAGE_DIR → **完全复用本模块回显/窗口/vision 链路**;
+- 帧与普通图片在消息中无差别(D-601);音轨丢弃(D-603,音频走 speech-in);
+- 前端 🎬 抽帧结果并入 pendingImages(同一 ≤4 额度)。

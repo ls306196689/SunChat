@@ -9,3 +9,5 @@ memory-retrieval-opt/design/,2026-09-06 产出,经用户确认迁移时沿用,20
 |---|---|---|
 | 2026-09-08 | R-001 | 基线 → R-001(2026-09-08): 新增 weather-core 模块+chat-direct-weather 接入(weather 直查前置于 DDG);见 design/modules/ |
 | 2026-09-08 | (迁移) | 创建 baseline.md,指向 memory-retrieval-opt/design/ |
+| 2026-09-11 | R-005/R-006/R-007 | 无基线修订(session契约/缓存/索引均内部实现,不改在册接口) |
+| 2026-09-11 | R-008 | 基线 → R-008(2026-09-11): 新增 chat-image 模块(对话图片通道:上传/回显/窗口注入/vision探测);见 design/modules/chat-image.md |

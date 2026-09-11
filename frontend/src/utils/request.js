@@ -94,3 +94,13 @@ export function transcribeSpeech(blob) {
 export function speechStatus() {
   return request.get('/speech/status')
 }
+
+// R-010: 视频抽帧(video blob → frame_ids)
+export function uploadVideoFrames(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/chat/video/frames', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  })
+}

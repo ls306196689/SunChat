@@ -9,7 +9,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import SessionItem from '@/components/ui/SessionItem.vue'
 import { NInput, NButton, NSpace, NScrollbar, NModal, NButtonGroup } from 'naive-ui'
 import { marked } from 'marked'
-import { uploadChatImage, chatImageUrl, transcribeSpeech, speechStatus } from '@/utils/request'
+import { uploadChatImage, chatImageUrl, transcribeSpeech, speechStatus, uploadVideoFrames } from '@/utils/request'
 
 const chatStore = useChatStore()
 const memoryStore = useMemoryStore()
@@ -92,6 +92,46 @@ async function addImageFiles(files) {
 
 function openImagePicker() {
   imageInputRef.value && imageInputRef.value.click()
+}
+
+// ==================== R-010: 视频输入(抽帧复用图片通道) ====================
+const videoInputRef = ref(null)
+const MAX_VIDEO_MB = 50
+const extractingVideo = ref(false)
+
+function openVideoPicker() {
+  videoInputRef.value && videoInputRef.value.click()
+}
+
+async function onVideoSelected(e) {
+  const file = e.target.files && e.target.files[0]
+  e.target.value = ''
+  if (!file) return
+  if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+    message.error(`视频超过 ${MAX_VIDEO_MB}MB 限制: ${file.name}`)
+    return
+  }
+  extractingVideo.value = true
+  try {
+    const resp = await uploadVideoFrames(file)
+    const d = resp?.data?.data
+    const ids = d?.frame_ids || []
+    if (!ids.length) throw new Error('未能从视频提取画面')
+    let added = 0
+    for (const id of ids) {
+      if (pendingImages.value.length >= MAX_CHAT_IMAGES) {
+        message.warning(`已达 ${MAX_CHAT_IMAGES} 张上限,未全部添加`)
+        break
+      }
+      pendingImages.value.push({ id, url: chatImageUrl(id), name: `帧@${(d.duration||0).toFixed(1)}s` })
+      added += 1
+    }
+    if (added) message.success(`已提取 ${added} 帧(${(d.duration || 0).toFixed(1)}s 视频)`)
+  } catch (err) {
+    message.error('视频处理失败: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    extractingVideo.value = false
+  }
 }
 
 function onImageSelected(e) {
@@ -418,6 +458,13 @@ function isLoadingMessage(msg) {
           style="display: none"
           @change="onImageSelected"
         />
+        <input
+          ref="videoInputRef"
+          type="file"
+          accept="video/*"
+          style="display: none"
+          @change="onVideoSelected"
+        />
         <div v-if="pendingImages.length" class="pending-images">
           <div v-for="(img, i) in pendingImages" :key="img.id" class="pending-image">
             <img :src="img.url" :alt="img.name" />
@@ -452,6 +499,14 @@ function isLoadingMessage(msg) {
               @click="isRecording ? stopRecording() : startRecording()"
             >
               {{ isRecording ? `⏹ ${recordSeconds}s` : '🎤 语音' }}
+            </n-button>
+            <n-button
+              title="视频输入 (mp4/mov/avi/webm, ≤50MB, 自动抽取关键帧)"
+              :loading="extractingVideo"
+              :disabled="chatStore.loading || extractingVideo || pendingImages.length >= 4"
+              @click="openVideoPicker"
+            >
+              🎬 视频
             </n-button>
             <n-button @click="chatStore.clearMessages" :disabled="chatStore.messages.length === 0">
               清空消息

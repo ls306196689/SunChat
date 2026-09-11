@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, reactive } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useMemoryStore } from '@/stores/memory'
 import { useThemeStore } from '@/stores/theme'
@@ -20,7 +20,7 @@ const scrollContainerRef = ref(null)
 const showSessionList = ref(false)
 
 const inputContent = ref('')
-// R-008: 待发送图片 [{ id, url, name }]（选择即上传,发送时携带 image_ids）
+// R-008/R-011: 待发送图片状态机 [{ id, url, localUrl, name, status: uploading|done|error, error, rawFile }]
 const pendingImages = ref([])
 const imageInputRef = ref(null)
 const MAX_CHAT_IMAGES = 4
@@ -63,8 +63,32 @@ watch(() => chatStore.messages, () => {
   })
 }, { deep: true })
 
-// R-008: 图片选择即上传 → pendingImages；粘贴/拖拽同路径
-async function addImageFiles(files) {
+// R-011: 图片上传状态机——乐观本地预览(uploading)→ done/error(可重试)
+function revokeEntry(entry) {
+  if (entry && entry.localUrl) {
+    try { URL.revokeObjectURL(entry.localUrl) } catch (e) { /* noop */ }
+    entry.localUrl = null
+  }
+}
+
+function uploadEntry(entry) {
+  entry.status = 'uploading'
+  entry.error = null
+  return uploadChatImage(entry.rawFile)
+    .then(resp => {
+      const imageId = resp?.data?.data?.image_id
+      if (!imageId) throw new Error('上传返回异常')
+      entry.id = imageId
+      entry.url = chatImageUrl(imageId)
+      entry.status = 'done'
+    })
+    .catch(err => {
+      entry.status = 'error'
+      entry.error = err?.response?.data?.detail || err.message || '上传失败'
+    })
+}
+
+function addImageFiles(files) {
   for (const file of files) {
     if (!file || !file.type || !file.type.startsWith('image/')) continue
     if (file.size > MAX_CHAT_IMAGE_MB * 1024 * 1024) {
@@ -75,20 +99,29 @@ async function addImageFiles(files) {
       message.error(`单条消息最多 ${MAX_CHAT_IMAGES} 张图`)
       break
     }
-    try {
-      const resp = await uploadChatImage(file)
-      const imageId = resp?.data?.data?.image_id
-      if (!imageId) throw new Error('上传返回异常')
-      pendingImages.value.push({
-        id: imageId,
-        url: chatImageUrl(imageId),
-        name: file.name
-      })
-    } catch (err) {
-      message.error('图片上传失败: ' + (err.response?.data?.detail || err.message))
-    }
+    const entry = reactive({
+      id: null,
+      url: null,
+      localUrl: URL.createObjectURL(file),  // 乐观预览,不等服务器
+      name: file.name || '图片',
+      status: 'uploading',
+      error: null,
+      rawFile: file
+    })
+    pendingImages.value.push(entry)
+    uploadEntry(entry)
   }
 }
+
+function retryUpload(i) {
+  const entry = pendingImages.value[i]
+  if (entry && entry.status === 'error' && entry.rawFile) uploadEntry(entry)
+}
+
+const pendingDoneCount = computed(() =>
+  pendingImages.value.filter(p => p.status === 'done').length)
+const pendingUploading = computed(() =>
+  pendingImages.value.some(p => p.status === 'uploading'))
 
 function openImagePicker() {
   imageInputRef.value && imageInputRef.value.click()
@@ -123,7 +156,15 @@ async function onVideoSelected(e) {
         message.warning(`已达 ${MAX_CHAT_IMAGES} 张上限,未全部添加`)
         break
       }
-      pendingImages.value.push({ id, url: chatImageUrl(id), name: `帧@${(d.duration||0).toFixed(1)}s` })
+      pendingImages.value.push({
+        id,
+        url: chatImageUrl(id),
+        localUrl: null,
+        name: `帧@${(d.duration||0).toFixed(1)}s`,
+        status: 'done',
+        error: null,
+        rawFile: null
+      })
       added += 1
     }
     if (added) message.success(`已提取 ${added} 帧(${(d.duration || 0).toFixed(1)}s 视频)`)
@@ -155,14 +196,33 @@ function onPaste(e) {
   }
 }
 
+// R-011: 拖拽遮罩(enter/leave 计数防子元素抖动)
+const dragDepth = ref(0)
+const dragActive = computed(() => dragDepth.value > 0)
+
+function onDragEnter(e) {
+  if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) {
+    e.preventDefault()
+    dragDepth.value += 1
+  }
+}
+function onDragOver(e) {
+  if (dragActive.value) e.preventDefault()
+}
+function onDragLeave() {
+  if (dragDepth.value > 0) dragDepth.value -= 1
+}
+
 function onDrop(e) {
   e.preventDefault()
+  dragDepth.value = 0
   if (e.dataTransfer && e.dataTransfer.files) {
     addImageFiles([...e.dataTransfer.files])
   }
 }
 
 function removePendingImage(i) {
+  revokeEntry(pendingImages.value[i])
   pendingImages.value.splice(i, 1)
 }
 
@@ -254,14 +314,37 @@ onMounted(() => {
   }
 })
 
+// R-011: 组件卸载回收 objectURL,防内存泄漏
+onUnmounted(() => {
+  pendingImages.value.forEach(revokeEntry)
+  stopRecordTimer()
+})
+
 async function handleSend() {
   // 空内容或上一条仍在生成时不重复发送（R-008: 有图无字也可发送）
   if ((!inputContent.value.trim() && !pendingImages.value.length) || chatStore.loading) return
 
+  // R-011: 发送策略——uploading 拦截;error 剔除(明示);仅 done 图发送
+  if (pendingUploading.value) {
+    message.warning('图片上传中,请稍候…')
+    return
+  }
+  const failedCount = pendingImages.value.filter(p => p.status === 'error').length
+  if (failedCount && !pendingDoneCount.value && !inputContent.value.trim()) {
+    message.error(`${failedCount} 张图片上传失败,请重试或移除`)
+    return
+  }
+  if (failedCount) {
+    message.warning(`已忽略 ${failedCount} 张上传失败的图片`)
+    pendingImages.value.filter(p => p.status === 'error').forEach(revokeEntry)
+    pendingImages.value = pendingImages.value.filter(p => p.status !== 'error')
+  }
+
   const content = inputContent.value
-  const imageIds = pendingImages.value.map(p => p.id)
+  const sentEntries = pendingImages.value.filter(p => p.status === 'done')
+  const imageIds = sentEntries.map(p => p.id)
   inputContent.value = ''
-  pendingImages.value = []
+  pendingImages.value = []  // 待发区先清空;失败时回滚回填,成功时随消息 URL 展示无需本地 URL
 
   try {
     await chatStore.sendMessage(
@@ -270,6 +353,7 @@ async function handleSend() {
       searchEnabled.value,
       imageIds
     )
+    sentEntries.forEach(revokeEntry)  // 发送成功:本地预览 URL 完成使命
 
     // 自动滚动到底部
     nextTick(() => {
@@ -277,6 +361,10 @@ async function handleSend() {
     })
   } catch (error) {
     if (!inputContent.value) inputContent.value = content
+    // R-011: 发送失败回滚图片(done 项已存服务端,直接回填免重传)
+    if (!pendingImages.value.length && sentEntries.length) {
+      pendingImages.value = sentEntries
+    }
     message.error('发送消息失败: ' + (error.message || '未知错误'))
   }
 }
@@ -448,7 +536,19 @@ function isLoadingMessage(msg) {
         </div>
       </n-list>
 
-      <div class="input-area" @drop="onDrop" @dragover.prevent>
+      <div
+        class="input-area"
+        :class="{ 'drag-active': dragActive }"
+        @drop="onDrop"
+        @dragenter="onDragEnter"
+        @dragover="onDragOver"
+        @dragleave="onDragLeave"
+      >
+        <!-- R-011: 拖拽遮罩 -->
+        <div v-if="dragActive" class="drop-overlay">
+          <span class="drop-overlay-icon">🖼️</span>
+          <span>松开以添加图片</span>
+        </div>
         <!-- R-008: 图片上传(按钮/粘贴/拖拽) -->
         <input
           ref="imageInputRef"
@@ -465,9 +565,23 @@ function isLoadingMessage(msg) {
           style="display: none"
           @change="onVideoSelected"
         />
+        <!-- R-011: 待发图三态(上传中/完成/失败重试) + 计数徽章 -->
         <div v-if="pendingImages.length" class="pending-images">
-          <div v-for="(img, i) in pendingImages" :key="img.id" class="pending-image">
-            <img :src="img.url" :alt="img.name" />
+          <span class="pending-counter">{{ pendingImages.length }}/{{ MAX_CHAT_IMAGES }}</span>
+          <div
+            v-for="(img, i) in pendingImages"
+            :key="img.localUrl || img.url || i"
+            class="pending-image"
+            :class="img.status"
+            :title="img.status === 'error' ? ('上传失败: ' + img.error) : img.name"
+          >
+            <img :src="img.localUrl || img.url" :alt="img.name" />
+            <div v-if="img.status === 'uploading'" class="pending-mask">
+              <span class="pending-spin"></span>
+            </div>
+            <div v-else-if="img.status === 'error'" class="pending-mask error">
+              <button class="pending-retry" @click.stop="retryUpload(i)" @mousedown.prevent>重试</button>
+            </div>
             <button class="pending-remove" title="移除" @click="removePendingImage(i)">×</button>
           </div>
         </div>
@@ -475,7 +589,7 @@ function isLoadingMessage(msg) {
           ref="inputRef"
           v-model:value="inputContent"
           type="textarea"
-          placeholder="输入消息... (Enter 发送, Shift+Enter 换行, 可粘贴图片)"
+          placeholder="输入消息... (Enter 发送, Shift+Enter 换行, 可粘贴/拖入图片)"
           :autosize="{ minRows: 2, maxRows: 6 }"
           @keydown="handleEnterSend"
           @paste="onPaste"
@@ -515,9 +629,9 @@ function isLoadingMessage(msg) {
               type="primary"
               :loading="chatStore.loading"
               @click="handleSend"
-              :disabled="!inputContent.trim() && !pendingImages.length"
+              :disabled="(!inputContent.trim() && !pendingImages.length) || pendingUploading"
             >
-              发送
+              {{ pendingUploading ? '上传中…' : '发送' }}
             </n-button>
           </n-space>
         </div>
@@ -634,6 +748,7 @@ function isLoadingMessage(msg) {
 }
 
 .input-area {
+  position: relative;
   padding: 20px;
   background-color: #fff;
   border-top: 1px solid #eee;
@@ -795,11 +910,26 @@ function isLoadingMessage(msg) {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
   margin-bottom: 8px;
+}
+
+.pending-counter {
+  font-size: 12px;
+  opacity: 0.75;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.15);
+  user-select: none;
 }
 
 .pending-image {
   position: relative;
+}
+
+.pending-image.error img {
+  border-color: #d03050;
+  filter: grayscale(0.4);
 }
 
 .pending-image img {
@@ -808,6 +938,68 @@ function isLoadingMessage(msg) {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid rgba(128, 128, 128, 0.3);
+  display: block;
+}
+
+.pending-mask {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.pending-mask.error {
+  background: rgba(160, 32, 60, 0.55);
+}
+
+.pending-retry {
+  border: none;
+  border-radius: 12px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+}
+
+.pending-retry:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.pending-spin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: pending-rotate 0.8s linear infinite;
+}
+
+@keyframes pending-rotate {
+  to { transform: rotate(360deg); }
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 2px dashed rgba(24, 160, 88, 0.85);
+  border-radius: 12px;
+  background: rgba(24, 160, 88, 0.10);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.drop-overlay-icon {
+  font-size: 28px;
 }
 
 .pending-remove {

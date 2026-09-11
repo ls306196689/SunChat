@@ -1,0 +1,73 @@
+{
+  "req_id": "R-011",
+  "req_type": "iteration",
+  "base_requirements": [
+    "R-008",
+    "R-010"
+  ],
+  "project": "sunchat",
+  "phase": "done",
+  "gates": [
+    {
+      "gate": "change_confirmed",
+      "at": "2026-09-11T21:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通(micro;纯前端UI优化2文件,后端零改动)"
+    },
+    {
+      "gate": "micro_design_confirmed",
+      "at": "2026-09-11T21:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "总授权直通;vite build+pytest回归替代前端单测(micro-req已声明理由)"
+    }
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "前端 ChatView+MessageItem 交互改造+构建回归",
+      "module": "frontend",
+      "status": "done",
+      "verified": true
+    }
+  ],
+  "analyses": [],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "NImage 预览在暗色主题样式不当",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "naive-ui 吃 ConfigProvider 主题,实测截图确认",
+      "status": "closed"
+    },
+    {
+      "id": "R-2",
+      "desc": "objectURL 泄漏",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "移除/发送/unmount 三路径 revoke(AC-5)",
+      "status": "closed"
+    },
+    {
+      "id": "R-3",
+      "desc": "拖拽遮罩子元素抖动",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "enter/leave 计数器",
+      "status": "closed"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "36dc956e",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-11T21:40:00+08:00"
+}

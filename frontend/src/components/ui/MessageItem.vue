@@ -45,17 +45,22 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
         <span>{{ name }}</span>
         <span>{{ createTime ? new Date(createTime).toLocaleString('zh-CN') : '' }}</span>
       </div>
-      <div v-if="images && images.length" class="msg-images">
-        <a
-          v-for="(img, i) in images"
-          :key="i"
-          :href="chatImageUrl(img)"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img :src="chatImageUrl(img)" class="msg-image" loading="lazy" alt="图片" />
-        </a>
-      </div>
+      <!-- R-011: 灯箱预览(组内左右切换/缩放),懒加载 -->
+      <n-image-group v-if="images && images.length">
+        <div class="msg-images">
+          <n-image
+            v-for="(img, i) in images"
+            :key="i"
+            class="msg-image"
+            :src="chatImageUrl(img)"
+            :preview-src="chatImageUrl(img)"
+            :alt="'图片' + (i + 1)"
+            lazy
+            object-fit="cover"
+            :img-props="{ style: 'border-radius:8px' }"
+          />
+        </div>
+      </n-image-group>
       <div class="text" v-if="!loading">
         <slot>{{ content }}</slot>
       </div>
@@ -171,10 +176,19 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
 }
 
 .msg-image {
-  max-width: 220px;
-  max-height: 160px;
+  width: 220px;
+  max-width: 100%;
+  height: 160px;
   border-radius: 8px;
+  cursor: zoom-in;
+  display: block;
+}
+
+.msg-image :deep(img) {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  border-radius: 8px;
   border: 1px solid rgba(128, 128, 128, 0.25);
 }
 </style>
@@ -221,10 +235,19 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
 }
 
 .msg-image {
-  max-width: 220px;
-  max-height: 160px;
+  width: 220px;
+  max-width: 100%;
+  height: 160px;
   border-radius: 8px;
+  cursor: zoom-in;
+  display: block;
+}
+
+.msg-image :deep(img) {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  border-radius: 8px;
   border: 1px solid rgba(128, 128, 128, 0.25);
 }
 </style>

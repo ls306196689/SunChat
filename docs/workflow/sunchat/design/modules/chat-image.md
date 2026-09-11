@@ -36,3 +36,10 @@
   帧 JPEG q82 以 `{uuid}.jpg` 落 CHAT_IMAGE_DIR → **完全复用本模块回显/窗口/vision 链路**;
 - 帧与普通图片在消息中无差别(D-601);音轨丢弃(D-603,音频走 speech-in);
 - 前端 🎬 抽帧结果并入 pendingImages(同一 ≤4 额度)。
+
+## 附录二:交互 UI(R-011 追加)
+- 待发图状态机:uploading(本地 objectURL 乐观预览+spin)/done/error(重试原地重传);
+  仅 done 计入发送,uploading 拦截发送,error 可忽略或重试;计数徽章 n/4。
+- 拖拽:dragenter/leave 计数遮罩(Files 类型判定,防子元素抖动)。
+- 历史/气泡图片:n-image-group 灯箱(懒加载、组内切换、缩放),不再跳新标签。
+- objectURL 在 移除/发送成功/页面卸载 三路径 revoke。

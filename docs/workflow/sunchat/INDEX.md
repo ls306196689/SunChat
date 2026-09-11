@@ -22,3 +22,5 @@
 | R-007 | 资源与数据层加固(DB 索引+记忆提取线程池+天气/行情 TTL 缓存) | iteration | done | - | 2026-09-11 |
 | R-008 | 对话图片输入(多模态 V1:图片问答+存盘+历史回显) | iteration | done | chat-image(新增) | 2026-09-11 |
 | R-009 | 语音输入 V2(faster-whisper 本地转写+输入框回填确认) | iteration | done | speech-in(新增) | 2026-09-11 |
+| R-010 | 视频输入 V3(PyAV 抽帧复用图片通道) | iteration | done | chat-image 附录 | 2026-09-11 |
+| R-011 | 图片交互 UI 优化(上传态机+乐观预览+重试+拖拽遮罩+灯箱) | iteration | done | chat-image 附录二 | 2026-09-11 |

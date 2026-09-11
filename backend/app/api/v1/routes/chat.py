@@ -22,6 +22,7 @@ from app.config import settings
 from core.security import sanitize_input
 from services.chat_service import chat_service
 from services.memory_service import memory_service
+from utils.logger import logger
 
 router = APIRouter()
 
@@ -135,6 +136,57 @@ def get_chat_image(image_id: str):
     media = {".png": "image/png", ".jpg": "image/jpeg",
              ".gif": "image/gif", ".webp": "image/webp"}[p.suffix]
     return FileResponse(str(p), media_type=media)
+
+
+# ==================== R-010: 视频抽帧 ====================
+
+def _sniff_video(header: bytes) -> bool:
+    """视频魔数白名单:mp4/mov(ftyp@4)/avi(RIFF..AVI)/webm(EBML)/flv(FLV)。"""
+    if header[4:8] == b"ftyp":
+        return True
+    if header.startswith(b"RIFF") and header[8:12] == b"AVI ":
+        return True
+    if header.startswith(b"\x1a\x45\xdf\xa3"):
+        return True
+    if header.startswith(b"FLV"):
+        return True
+    return False
+
+
+@router.post("/chat/video/frames")
+async def extract_video_frames(file: UploadFile = File(...)):
+    """R-010: 视频→均匀抽帧≤VIDEO_MAX_FRAMES,帧以 chat image 形式落盘并返回 ids。"""
+    from starlette.concurrency import run_in_threadpool
+    max_bytes = _cfg().VIDEO_MAX_MB * 1024 * 1024
+    data = await file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413,
+                            detail=f"视频超过 {_cfg().VIDEO_MAX_MB}MB 限制")
+    if not _sniff_video(data[:16]):
+        raise HTTPException(status_code=400,
+                            detail="不支持的视频格式(mp4/mov/avi/webm/flv)")
+
+    from core.video import extract_frames
+    try:
+        frames, duration = await run_in_threadpool(extract_frames, data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"[VIDEO] 抽帧异常: {e}")
+        raise HTTPException(status_code=500, detail="视频处理失败")
+    if not frames:
+        raise HTTPException(status_code=400, detail="未解出任何视频帧")
+
+    img_dir = Path(_cfg().CHAT_IMAGE_DIR)
+    img_dir.mkdir(parents=True, exist_ok=True)
+    frame_ids = []
+    for (jpeg, _ts) in frames:
+        fid = f"{uuid.uuid4()}.jpg"
+        (img_dir / fid).write_bytes(jpeg)
+        frame_ids.append(fid)
+    return {"code": 200, "message": "success",
+            "data": {"frame_ids": frame_ids, "count": len(frame_ids),
+                     "duration": round(duration, 2)}}
 
 
 class StreamResponse(BaseModel):

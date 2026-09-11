@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     WHISPER_MODEL_DIR: str = str(DATA_DIR / "whisper-models")  # 模型预置目录（运行期禁下载）
     SPEECH_MAX_MB: int = 20  # 录音上传上限
 
+    # 视频输入约束（R-010）
+    VIDEO_MAX_MB: int = 50  # 视频上传上限
+    VIDEO_MAX_FRAMES: int = 4  # 均匀抽帧数（与单消息图片上限对齐）
+
     # 搜索配置
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本
     SEARCH_TIMEOUT: int = 10  # 搜索超时（秒）

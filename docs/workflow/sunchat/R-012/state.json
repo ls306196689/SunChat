@@ -1,0 +1,28 @@
+{
+  "req_id": "R-012",
+  "req_type": "bugfix",
+  "base_requirements": ["R-008", "R-009", "R-010"],
+  "project": "sunchat",
+  "phase": "done",
+  "gates": [
+    {"gate": "change_confirmed", "at": "2026-09-11T23:35:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通(用户:后续所有动作授权);R-011报障引出"},
+    {"gate": "micro_design_confirmed", "at": "2026-09-11T23:35:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;调用侧双写防御(chat.js:195既有范式),不动全局拦截器"}
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    {"id": 1, "title": "ChatView 4处响应字段双写修复+AC-1 node断言+回归", "module": "frontend", "status": "done", "verified": true}
+  ],
+  "analyses": [],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {"id": "R-1", "desc": "双写防御在拦截器未来变更时仍需三读", "prob": "低", "impact": "低", "mitigation": "仓库既有范式一致;chat.js同款双写长期稳定", "status": "closed"}
+  ],
+  "repo": {"created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "8a3d6339", "push_pending": false},
+  "updated_at": "2026-09-11T23:42:00+08:00",
+  "debug": {"D-1": "用户报障图传红→后端curl/日志实证200成功且落盘→定位axios拦截器解包+调用侧三重解包恒undefined→node桩复现断言→双写最小修复;1回合resolved", "lesson": "前端-后端联调须以浏览器拦截器链路为验,直连脚本盲区已登记skill issue"}
+}

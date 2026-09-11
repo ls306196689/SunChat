@@ -76,7 +76,7 @@ function uploadEntry(entry) {
   entry.error = null
   return uploadChatImage(entry.rawFile)
     .then(resp => {
-      const imageId = resp?.data?.data?.image_id
+      const imageId = resp?.data?.image_id ?? resp?.image_id  // R-012: 拦截器已解包一层
       if (!imageId) throw new Error('上传返回异常')
       entry.id = imageId
       entry.url = chatImageUrl(imageId)
@@ -147,7 +147,7 @@ async function onVideoSelected(e) {
   extractingVideo.value = true
   try {
     const resp = await uploadVideoFrames(file)
-    const d = resp?.data?.data
+    const d = resp?.data ?? resp  // R-012: 拦截器已解包,双读防御
     const ids = d?.frame_ids || []
     if (!ids.length) throw new Error('未能从视频提取画面')
     let added = 0
@@ -271,7 +271,7 @@ async function startRecording() {
       isTranscribing.value = true
       try {
         const resp = await transcribeSpeech(blob)
-        const text = (resp?.data?.data?.text || '').trim()
+        const text = ((resp?.data?.text ?? resp?.text) || '').trim()  // R-012
         if (text) {
           inputContent.value = inputContent.value.trim()
             ? inputContent.value.trimEnd() + ' ' + text
@@ -306,7 +306,7 @@ onMounted(() => {
   // R-009: ASR 状态探测(仅提示,不阻断;首次转写触发模型加载)
   if (recorderSupported) {
     speechStatus().then(r => {
-      const st = r?.data?.data?.status
+      const st = r?.data?.status ?? r?.status  // R-012
       if (st === 'unavailable') {
         message.warning('语音模型未预置,🎤 暂不可用')
       }

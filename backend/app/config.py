@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     CHAT_IMAGE_WINDOW_MSGS: int = 3  # R-008: 历史注入窗口（最近N条带图消息）
     CHAT_IMAGE_TOTAL_MAX: int = 8  # R-008: 单请求总图上限（控token/显存）
 
+    # 语音输入约束（R-009）
+    WHISPER_MODEL_SIZE: str = "base"  # tiny/base/small；环境变量 WHISPER_MODEL_SIZE 可调
+    WHISPER_MODEL_DIR: str = str(DATA_DIR / "whisper-models")  # 模型预置目录（运行期禁下载）
+    SPEECH_MAX_MB: int = 20  # 录音上传上限
+
     # 搜索配置
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本
     SEARCH_TIMEOUT: int = 10  # 搜索超时（秒）

@@ -21,3 +21,4 @@
 | R-006 | 热路径延迟优化(去重复 LLM/行情调用+轻调用短超时+/health 缓存) | iteration | done | - | 2026-09-11 |
 | R-007 | 资源与数据层加固(DB 索引+记忆提取线程池+天气/行情 TTL 缓存) | iteration | done | - | 2026-09-11 |
 | R-008 | 对话图片输入(多模态 V1:图片问答+存盘+历史回显) | iteration | done | chat-image(新增) | 2026-09-11 |
+| R-009 | 语音输入 V2(faster-whisper 本地转写+输入框回填确认) | iteration | active | - | 2026-09-11 |

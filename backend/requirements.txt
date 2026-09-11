@@ -25,3 +25,6 @@ pydantic-settings==2.7.0
 
 # PDF Processing (for knowledge base)
 pypdf==5.1.0
+
+# ASR 语音转文字 (R-009, 本地 faster-whisper, av 免系统 ffmpeg)
+faster-whisper>=1.0.0

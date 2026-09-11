@@ -1,0 +1,38 @@
+{
+  "req_id": "R-009",
+  "req_type": "iteration",
+  "base_requirements": ["R-008"],
+  "project": "sunchat",
+  "phase": "execute",
+  "gates": [
+    {"gate": "requirements_confirmed", "at": "2026-09-11T10:20:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通(全模态三期第2期;方案=本地faster-whisper base/int8+确认式交互)"},
+    {"gate": "architecture_confirmed", "at": "2026-09-11T10:20:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;新模块speech-in,LLM链路零改动"},
+    {"gate": "design_confirmed", "at": "2026-09-11T10:20:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;D-501~504"},
+    {"gate": "plan_confirmed", "at": "2026-09-11T10:20:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;2步"}
+  ],
+  "clarifications": [],
+  "modules": [],
+  "steps": [
+    {"id": 1, "title": "后端 core/asr.py + speech 路由 + config + 单测", "module": "backend/core+routes", "status": "in_progress", "verified": false},
+    {"id": 2, "title": "前端 🎤 MediaRecorder + 转写回填 + E2E + 归档", "module": "frontend", "status": "pending", "verified": false}
+  ],
+  "analyses": [
+    {"id": "A-1", "topic": "语音输入ASR可行性", "conclusion": "C1 faster-whisper可装免ffmpeg(已装1.2.1+av);C2 确认式交互;C3 镜像下载完成(142MB base int8就位data/whisper-models),运行期离线", "evidence_count": 5, "status": "confirmed"}
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {"id": "R-1", "desc": "base中文准确率不足", "prob": "中", "impact": "中", "mitigation": "确认式交互编辑兜底;WHISPER_MODEL_SIZE可升配", "status": "open"},
+    {"id": "R-2", "desc": "首次加载阻塞请求", "prob": "中", "impact": "低", "mitigation": "懒加载+status探测+503提示", "status": "open"},
+    {"id": "R-3", "desc": "webm/opus解码不可用", "prob": "低", "impact": "中", "mitigation": "av已装;wav兜底(AC-5实机定)", "status": "open"},
+    {"id": "R-4", "desc": "录音隐私", "prob": "低", "impact": "中", "mitigation": "纯本地处理零外传", "status": "mitigated"},
+    {"id": "R-5", "desc": "内存占用", "prob": "低", "impact": "低", "mitigation": "int8最小化;单机可接受", "status": "mitigated"}
+  ],
+  "repo": {"created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "9e14c672", "push_pending": false},
+  "updated_at": "2026-09-11T10:20:00+08:00"
+}

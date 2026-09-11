@@ -66,3 +66,17 @@ request.interceptors.response.use(
 )
 
 export default request
+
+// R-008: 对话图片上传（multipart,不走 JSON 拦截器假设）
+export function uploadChatImage(file) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/chat/images', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// R-008: 图片回显 URL
+export function chatImageUrl(imageId) {
+  return `${API_BASE_URL}/chat/images/${encodeURIComponent(imageId)}`
+}

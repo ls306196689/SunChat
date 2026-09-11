@@ -9,6 +9,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import SessionItem from '@/components/ui/SessionItem.vue'
 import { NInput, NButton, NSpace, NScrollbar, NModal, NButtonGroup } from 'naive-ui'
 import { marked } from 'marked'
+import { uploadChatImage, chatImageUrl } from '@/utils/request'
 
 const chatStore = useChatStore()
 const memoryStore = useMemoryStore()
@@ -19,6 +20,11 @@ const scrollContainerRef = ref(null)
 const showSessionList = ref(false)
 
 const inputContent = ref('')
+// R-008: 待发送图片 [{ id, url, name }]（选择即上传,发送时携带 image_ids）
+const pendingImages = ref([])
+const imageInputRef = ref(null)
+const MAX_CHAT_IMAGES = 4
+const MAX_CHAT_IMAGE_MB = 8
 const memoryEnabled = ref(true)
 const searchEnabled = ref(true)
 const showSentMessages = ref(false)
@@ -57,18 +63,84 @@ watch(() => chatStore.messages, () => {
   })
 }, { deep: true })
 
+// R-008: 图片选择即上传 → pendingImages；粘贴/拖拽同路径
+async function addImageFiles(files) {
+  for (const file of files) {
+    if (!file || !file.type || !file.type.startsWith('image/')) continue
+    if (file.size > MAX_CHAT_IMAGE_MB * 1024 * 1024) {
+      message.error(`图片超过 ${MAX_CHAT_IMAGE_MB}MB 限制: ${file.name}`)
+      continue
+    }
+    if (pendingImages.value.length >= MAX_CHAT_IMAGES) {
+      message.error(`单条消息最多 ${MAX_CHAT_IMAGES} 张图`)
+      break
+    }
+    try {
+      const resp = await uploadChatImage(file)
+      const imageId = resp?.data?.data?.image_id
+      if (!imageId) throw new Error('上传返回异常')
+      pendingImages.value.push({
+        id: imageId,
+        url: chatImageUrl(imageId),
+        name: file.name
+      })
+    } catch (err) {
+      message.error('图片上传失败: ' + (err.response?.data?.detail || err.message))
+    }
+  }
+}
+
+function openImagePicker() {
+  imageInputRef.value && imageInputRef.value.click()
+}
+
+function onImageSelected(e) {
+  addImageFiles([...(e.target.files || [])])
+  e.target.value = ''
+}
+
+function onPaste(e) {
+  const items = e.clipboardData && e.clipboardData.items
+  if (!items) return
+  const files = []
+  for (const item of items) {
+    if (item.type && item.type.startsWith('image/')) {
+      const f = item.getAsFile()
+      if (f) files.push(f)
+    }
+  }
+  if (files.length) {
+    e.preventDefault()
+    addImageFiles(files)
+  }
+}
+
+function onDrop(e) {
+  e.preventDefault()
+  if (e.dataTransfer && e.dataTransfer.files) {
+    addImageFiles([...e.dataTransfer.files])
+  }
+}
+
+function removePendingImage(i) {
+  pendingImages.value.splice(i, 1)
+}
+
 async function handleSend() {
-  // 空内容或上一条仍在生成时不重复发送
-  if (!inputContent.value.trim() || chatStore.loading) return
+  // 空内容或上一条仍在生成时不重复发送（R-008: 有图无字也可发送）
+  if ((!inputContent.value.trim() && !pendingImages.value.length) || chatStore.loading) return
 
   const content = inputContent.value
+  const imageIds = pendingImages.value.map(p => p.id)
   inputContent.value = ''
+  pendingImages.value = []
 
   try {
     await chatStore.sendMessage(
-      content,
+      content || '请看我发送的图片。',
       memoryEnabled.value,
-      searchEnabled.value
+      searchEnabled.value,
+      imageIds
     )
 
     // 自动滚动到底部
@@ -240,6 +312,7 @@ function isLoadingMessage(msg) {
               :content="msg.content"
               :create-time="msg.created_at"
               :sources="msg.sources || []"
+              :images="msg.images || []"
               :loading="msg.role === 'assistant' && chatStore.loading && msg.id === (chatStore.messages[chatStore.messages.length - 1]?.id)"
             />
             
@@ -247,18 +320,41 @@ function isLoadingMessage(msg) {
         </div>
       </n-list>
 
-      <div class="input-area">
+      <div class="input-area" @drop="onDrop" @dragover.prevent>
+        <!-- R-008: 图片上传(按钮/粘贴/拖拽) -->
+        <input
+          ref="imageInputRef"
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          multiple
+          style="display: none"
+          @change="onImageSelected"
+        />
+        <div v-if="pendingImages.length" class="pending-images">
+          <div v-for="(img, i) in pendingImages" :key="img.id" class="pending-image">
+            <img :src="img.url" :alt="img.name" />
+            <button class="pending-remove" title="移除" @click="removePendingImage(i)">×</button>
+          </div>
+        </div>
         <n-input
           ref="inputRef"
           v-model:value="inputContent"
           type="textarea"
-          placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+          placeholder="输入消息... (Enter 发送, Shift+Enter 换行, 可粘贴图片)"
           :autosize="{ minRows: 2, maxRows: 6 }"
           @keydown="handleEnterSend"
+          @paste="onPaste"
         />
         
         <div class="input-actions">
           <n-space>
+            <n-button
+              title="添加图片 (png/jpg/gif/webp, ≤8MB, 最多4张)"
+              :disabled="chatStore.loading || pendingImages.length >= 4"
+              @click="openImagePicker"
+            >
+              📎 图片
+            </n-button>
             <n-button @click="chatStore.clearMessages" :disabled="chatStore.messages.length === 0">
               清空消息
             </n-button>
@@ -266,7 +362,7 @@ function isLoadingMessage(msg) {
               type="primary"
               :loading="chatStore.loading"
               @click="handleSend"
-              :disabled="!inputContent.trim()"
+              :disabled="!inputContent.trim() && !pendingImages.length"
             >
               发送
             </n-button>
@@ -540,5 +636,40 @@ function isLoadingMessage(msg) {
     bottom: 90px;
     right: 10px;
   }
+}
+
+.pending-images {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.pending-image {
+  position: relative;
+}
+
+.pending-image img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.pending-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  padding: 0;
 }
 </style>

@@ -1,0 +1,41 @@
+{
+  "req_id": "R-008",
+  "req_type": "iteration",
+  "base_requirements": ["R-004", "R-006", "R-007"],
+  "project": "sunchat",
+  "phase": "execute",
+  "gates": [
+    {"gate": "requirements_confirmed", "at": "2026-09-11T01:05:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通(用户:后续全部自动选择最优,我全部授权);V1范围=图片(全模态三期第1期,语音/视频R-009/010)"},
+    {"gate": "architecture_confirmed", "at": "2026-09-11T01:05:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;新能力面chat-image通道,零新依赖"},
+    {"gate": "design_confirmed", "at": "2026-09-11T01:05:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;D-401~405"},
+    {"gate": "plan_confirmed", "at": "2026-09-11T01:05:00+08:00", "confirmed_by": "user",
+     "note": "总授权直通;2步计划"}
+  ],
+  "clarifications": [
+    {"id": 1, "question": "V1范围?图片/图片+语音/全模态", "resolution": "全模态大计划(拆分三期:R-008图片,R-009语音,R-010视频)", "status": "closed"},
+    {"id": 2, "question": "图片落盘持久化+历史回显?", "resolution": "存盘+历史回显", "status": "closed"}
+  ],
+  "modules": [],
+  "steps": [
+    {"id": 1, "title": "后端图片通道(存储/校验/透传/窗口/vision探测)", "module": "backend routes+service+core", "status": "in_progress", "verified": false},
+    {"id": 2, "title": "前端接入+全量回归+归档", "module": "frontend", "status": "pending", "verified": false}
+  ],
+  "analyses": [
+    {"id": "A-1", "topic": "多模态(图片)接入面摸底", "conclusion": "C1协议原生支持零推理侧改造;C2六面打通清单;C3能力检测/api/show可行;C4语音/视频缺基建分期", "evidence_count": 11, "status": "confirmed"}
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {"id": "R-1", "desc": "base64大窗爆token/显存", "prob": "中", "impact": "中", "mitigation": "窗口硬上限(3条带图消息x4张,总8);AC-4截断测试", "status": "open"},
+    {"id": "R-2", "desc": "图片目录膨胀", "prob": "中", "impact": "低", "mitigation": "8MB/张限;清理策略登记遗留候选", "status": "open"},
+    {"id": "R-3", "desc": "非vision模型收images报错", "prob": "低", "impact": "中", "mitigation": "supports_vision探测+自动strip+warn(AC-5)", "status": "open"},
+    {"id": "R-4", "desc": "旧客户端不传images字段", "prob": "低", "impact": "低", "mitigation": "pydantic默认[]向后兼容", "status": "closed"},
+    {"id": "R-5", "desc": "路径穿越/存储名伪造", "prob": "低", "impact": "高", "mitigation": "uuid正则+扩展名白名单双校验;上传侧扩展名派生自魔数非客户端filename(AC-1,AC-2)", "status": "open"}
+  ],
+  "repo": {"created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "87b7c2d3", "push_pending": false},
+  "updated_at": "2026-09-11T01:05:00+08:00"
+}

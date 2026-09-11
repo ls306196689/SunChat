@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { chatImageUrl } from '@/utils/request'
 
 const props = defineProps({
   role: {
@@ -22,6 +23,10 @@ const props = defineProps({
   sources: {
     type: Array,
     default: () => []
+  },
+  images: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -39,6 +44,17 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
       <div class="meta">
         <span>{{ name }}</span>
         <span>{{ createTime ? new Date(createTime).toLocaleString('zh-CN') : '' }}</span>
+      </div>
+      <div v-if="images && images.length" class="msg-images">
+        <a
+          v-for="(img, i) in images"
+          :key="i"
+          :href="chatImageUrl(img)"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <img :src="chatImageUrl(img)" class="msg-image" loading="lazy" alt="图片" />
+        </a>
       </div>
       <div class="text" v-if="!loading">
         <slot>{{ content }}</slot>
@@ -146,6 +162,21 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
 }
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.msg-image {
+  max-width: 220px;
+  max-height: 160px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+}
 </style>
 
 <style scoped>
@@ -180,5 +211,20 @@ const name = computed(() => props.role === 'user' ? '你' : 'AI 助手')
 .source-idx {
   color: #888;
   margin-right: 4px;
+}
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.msg-image {
+  max-width: 220px;
+  max-height: 160px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(128, 128, 128, 0.25);
 }
 </style>

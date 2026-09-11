@@ -124,7 +124,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // 发送消息（默认 SSE 流式；网络级失败自动回退非流式接口）
-  async function sendMessage(content, memoryContext = true, searchEnabled = true) {
+  async function sendMessage(content, memoryContext = true, searchEnabled = true, imageIds = []) {
     if (!currentSession.value) {
       await createSession()
     }
@@ -140,6 +140,7 @@ export const useChatStore = defineStore('chat', () => {
         id: timestamp,
         role: 'user',
         content,
+        images: Array.isArray(imageIds) ? [...imageIds] : [],
         created_at: new Date().toISOString()
       }
       messages.value.push(userMsg)
@@ -158,7 +159,8 @@ export const useChatStore = defineStore('chat', () => {
         session_id: currentSession.value.session_id,
         content,
         memory_context: memoryContext,
-        search_enabled: searchEnabled
+        search_enabled: searchEnabled,
+        images: Array.isArray(imageIds) ? imageIds : []
       }
 
       const patchPlaceholder = (fn) => {

@@ -80,3 +80,17 @@ export function uploadChatImage(file) {
 export function chatImageUrl(imageId) {
   return `${API_BASE_URL}/chat/images/${encodeURIComponent(imageId)}`
 }
+
+// R-009: 语音转写(audio blob → text)
+export function transcribeSpeech(blob) {
+  const form = new FormData()
+  form.append('file', blob, 'recording.webm')
+  return request.post('/speech/transcribe', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// R-009: ASR 状态(🎤 可用性)
+export function speechStatus() {
+  return request.get('/speech/status')
+}

@@ -9,7 +9,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import SessionItem from '@/components/ui/SessionItem.vue'
 import { NInput, NButton, NSpace, NScrollbar, NModal, NButtonGroup } from 'naive-ui'
 import { marked } from 'marked'
-import { uploadChatImage, chatImageUrl } from '@/utils/request'
+import { uploadChatImage, chatImageUrl, transcribeSpeech, speechStatus } from '@/utils/request'
 
 const chatStore = useChatStore()
 const memoryStore = useMemoryStore()
@@ -28,7 +28,7 @@ const MAX_CHAT_IMAGE_MB = 8
 const memoryEnabled = ref(true)
 const searchEnabled = ref(true)
 const showSentMessages = ref(false)
-const message = window.message || { error: (msg) => console.error(msg), success: (msg) => console.log(msg) }
+const message = window.message || { error: (msg) => console.error(msg), success: (msg) => console.log(msg), warning: (msg) => console.warn(msg) }
 
 // 获取所有用户发送的内容
 const userSentMessages = computed(() => {
@@ -125,6 +125,94 @@ function onDrop(e) {
 function removePendingImage(i) {
   pendingImages.value.splice(i, 1)
 }
+
+// ==================== R-009: 语音输入 ====================
+const recorderSupported = typeof window !== 'undefined' &&
+  typeof window.MediaRecorder !== 'undefined' &&
+  !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+const isRecording = ref(false)
+const isTranscribing = ref(false)
+const recordSeconds = ref(0)
+let mediaRecorder = null
+let audioChunks = []
+let recordTimer = null
+
+function pickAudioMime() {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+  for (const m of candidates) {
+    if (window.MediaRecorder.isTypeSupported && window.MediaRecorder.isTypeSupported(m)) return m
+  }
+  return ''
+}
+
+function startRecordTimer() {
+  recordSeconds.value = 0
+  recordTimer = setInterval(() => { recordSeconds.value += 1 }, 1000)
+}
+
+function stopRecordTimer() {
+  if (recordTimer) { clearInterval(recordTimer); recordTimer = null }
+}
+
+async function startRecording() {
+  if (isRecording.value || chatStore.loading) return
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const mime = pickAudioMime()
+    mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+    audioChunks = []
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) audioChunks.push(e.data) }
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blobType = mediaRecorder.mimeType || mime || 'audio/webm'
+      const blob = new Blob(audioChunks, { type: blobType })
+      audioChunks = []
+      if (!blob.size) return
+      isTranscribing.value = true
+      try {
+        const resp = await transcribeSpeech(blob)
+        const text = (resp?.data?.data?.text || '').trim()
+        if (text) {
+          inputContent.value = inputContent.value.trim()
+            ? inputContent.value.trimEnd() + ' ' + text
+            : text
+          inputRef.value && inputRef.value.focus && inputRef.value.focus()
+        } else {
+          message.warning('未识别到语音内容')
+        }
+      } catch (err) {
+        message.error('语音转写失败: ' + (err.response?.data?.detail || err.message))
+      } finally {
+        isTranscribing.value = false
+      }
+    }
+    mediaRecorder.start()
+    isRecording.value = true
+    startRecordTimer()
+  } catch (err) {
+    message.error('无法访问麦克风: ' + (err.message || '权限被拒绝'))
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && isRecording.value) {
+    mediaRecorder.stop()
+    isRecording.value = false
+    stopRecordTimer()
+  }
+}
+
+onMounted(() => {
+  // R-009: ASR 状态探测(仅提示,不阻断;首次转写触发模型加载)
+  if (recorderSupported) {
+    speechStatus().then(r => {
+      const st = r?.data?.data?.status
+      if (st === 'unavailable') {
+        message.warning('语音模型未预置,🎤 暂不可用')
+      }
+    }).catch(() => {})
+  }
+})
 
 async function handleSend() {
   // 空内容或上一条仍在生成时不重复发送（R-008: 有图无字也可发送）
@@ -354,6 +442,16 @@ function isLoadingMessage(msg) {
               @click="openImagePicker"
             >
               📎 图片
+            </n-button>
+            <n-button
+              v-if="recorderSupported"
+              :type="isRecording ? 'error' : 'default'"
+              :loading="isTranscribing"
+              :title="isRecording ? `录音中 ${recordSeconds}s,点击停止并转写` : '语音输入 (再次点击停止并转文字)'"
+              :disabled="isTranscribing"
+              @click="isRecording ? stopRecording() : startRecording()"
+            >
+              {{ isRecording ? `⏹ ${recordSeconds}s` : '🎤 语音' }}
             </n-button>
             <n-button @click="chatStore.clearMessages" :disabled="chatStore.messages.length === 0">
               清空消息

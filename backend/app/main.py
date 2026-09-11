@@ -17,7 +17,8 @@ async def lifespan(app: FastAPI):
     from utils.logger import logger
 
     # 1. 确保数据目录存在（绝对路径，消除 CWD 依赖）
-    for d in (DATA_DIR, UPLOAD_DIR, Path(settings.CHROMA_PERSIST_DIR),
+    for d in (DATA_DIR, UPLOAD_DIR, Path(settings.CHAT_IMAGE_DIR),
+              Path(settings.CHROMA_PERSIST_DIR),
               Path(settings.MODEL_CONFIG_PATH).parent):
         try:
             d.mkdir(parents=True, exist_ok=True)

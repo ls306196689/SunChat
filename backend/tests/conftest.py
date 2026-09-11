@@ -58,15 +58,18 @@ def module_isolated_env(request):
     mod = request.node.name.replace(".py", "") or "default"
     chroma_path = f"./data/test_chroma_{mod}"
     db_path = f"./data/test_sunchat_{mod}.db"
+    imgs_path = f"./data/test_chat_imgs_{mod}"  # R-008: 对话图片目录隔离
 
     _clear_chroma_cache()
     prev_db = os.environ.get("DATABASE_URL")
     prev_chroma_env = os.environ.get("CHROMA_PERSIST_DIR")
+    prev_imgs_env = os.environ.get("CHAT_IMAGE_DIR")
     os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
     os.environ["CHROMA_PERSIST_DIR"] = chroma_path
+    os.environ["CHAT_IMAGE_DIR"] = imgs_path
     importlib.reload(app.config)
 
-    for p in (chroma_path, db_path):
+    for p in (chroma_path, db_path, imgs_path):
         if os.path.isdir(p):
             shutil.rmtree(p)
         elif os.path.exists(p):
@@ -90,9 +93,13 @@ def module_isolated_env(request):
         os.environ["CHROMA_PERSIST_DIR"] = prev_chroma_env
     else:
         os.environ.pop("CHROMA_PERSIST_DIR", None)
+    if prev_imgs_env is not None:
+        os.environ["CHAT_IMAGE_DIR"] = prev_imgs_env
+    else:
+        os.environ.pop("CHAT_IMAGE_DIR", None)
     importlib.reload(app.config)
 
-    for p in (chroma_path, db_path):
+    for p in (chroma_path, db_path, imgs_path):
         if os.path.isdir(p):
             try:
                 shutil.rmtree(p)

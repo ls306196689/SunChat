@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = f"sqlite:///{DATA_DIR / 'sunchat.db'}"
     CHROMA_PERSIST_DIR: str = str(DATA_DIR / "chroma")
     UPLOAD_DIR: str = str(UPLOAD_DIR)  # 知识库上传落盘目录
+    CHAT_IMAGE_DIR: str = str(DATA_DIR / "uploads" / "chat")  # R-008: 对话图片落盘目录
 
     # 应用配置
     APP_HOST: str = "0.0.0.0"
@@ -48,6 +49,10 @@ class Settings(BaseSettings):
     # 上传约束
     ALLOWED_FILE_TYPES: str = "pdf,docx,txt,md"
     MAX_UPLOAD_MB: int = 20
+    CHAT_IMAGE_MAX_MB: int = 8  # R-008: 对话单图上传上限
+    CHAT_IMAGE_MAX_PER_MSG: int = 4  # R-008: 单条消息附图上限
+    CHAT_IMAGE_WINDOW_MSGS: int = 3  # R-008: 历史注入窗口（最近N条带图消息）
+    CHAT_IMAGE_TOTAL_MAX: int = 8  # R-008: 单请求总图上限（控token/显存）
 
     # 搜索配置
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本

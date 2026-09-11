@@ -256,6 +256,7 @@ class Message(Base):
     content = Column(Text, nullable=False)
     raw_response = Column(Text)  # LLM 原始响应
     tokens_used = Column(Integer, default=0)
+    images = Column(Text, default="[]")  # R-008: 附图 image_id 列表（JSON）
     created_at = Column(DateTime, default=func.now(), index=True)  # R-007: 消息排序分页
 
 
@@ -365,6 +366,13 @@ def ensure_schema():
     if "memories" in tables:
         with eng.begin() as conn:
             conn.execute(text("UPDATE memories SET category = 'habit' WHERE category = 'habbit'"))
+
+    # R-008: messages.images 附图列（旧库幂等补列）
+    if "messages" in tables:
+        cols = {c["name"] for c in insp.get_columns("messages")}
+        if "images" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE messages ADD COLUMN images TEXT DEFAULT '[]'"))
 
     # R-007: 存量库幂等补齐热列索引（新库由模型 index=True 自动建，IF NOT EXISTS 双保险）
     _HOT_INDEXES = [

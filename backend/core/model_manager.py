@@ -40,6 +40,9 @@ class ModelManager:
         self._avail_flag: Optional[bool] = None
         self._avail_ts: float = 0.0
         self._avail_ttl = getattr(settings, "HEALTH_AVAIL_TTL", 30)
+        # R-008: 模型 vision 能力缓存 {name: (mono_ts, bool)}
+        self._vision_cache: Dict[str, tuple] = {}
+        self._vision_ttl = 300
         # 运行时选择（持久化）
         self._chat_model_override: Optional[str] = None
         self._embedding_model_override: Optional[str] = None
@@ -133,6 +136,29 @@ class ModelManager:
         """模型切换/测试用:强制下次 is_available 实探。"""
         self._avail_flag = None
         self._avail_ts = 0.0
+
+    # ==================== 能力探测（R-008） ====================
+
+    def supports_vision(self, model_name: Optional[str] = None) -> bool:
+        """模型是否支持图像输入（Ollama /api/show capabilities 含 vision）。
+
+        结果 TTL 300s 缓存（仿 is_available 模式）；服务不可达按 False。"""
+        name = model_name or self.resolve_chat_model()
+        now = time.monotonic()
+        hit = self._vision_cache.get(name)
+        if hit and (now - hit[0]) < self._vision_ttl:
+            return hit[1]
+        val = False
+        try:
+            url = f"{settings.LLM_API_URL.rstrip('/')}/api/show"
+            resp = requests.post(url, json={"model": name}, timeout=5)
+            if resp.status_code == 200:
+                caps = resp.json().get("capabilities") or []
+                val = "vision" in caps
+        except Exception:
+            val = False
+        self._vision_cache[name] = (now, val)
+        return val
 
     # ==================== 模型分类 ====================
 

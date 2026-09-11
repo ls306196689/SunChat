@@ -16,6 +16,7 @@ import re
 from typing import Dict, List
 
 FAKE_CHAT_MODELS = [{"name": "qwen2.5:7b"}, {"name": "nomic-embed-text"}]
+FAKE_VISION_MODELS = {"qwen2.5:7b"}  # R-008: 默认对话模型带 vision,便于图片链路测试
 # 调用计数与最近 payload 捕获（供测试断言 0 LLM / system 单份 / 多轮历史）
 CALLS = {"chat": 0, "embed": 0}
 LAST_CHAT_PAYLOADS: List[Dict] = []
@@ -153,6 +154,13 @@ def dispatch(url: str, payload: Dict, stream: bool = False) -> FakeResponse:
             "eval_count": 8, "prompt_eval_count": 12,
             "model": payload.get("model", "fake"),
         })
+    if url.endswith("/api/show"):
+        # R-008: vision 能力探测桩(仅 FAKE_VISION_MODELS 报告 vision)
+        name = (payload or {}).get("model", "")
+        caps = ["completion", "tools"]
+        if name in FAKE_VISION_MODELS:
+            caps.append("vision")
+        return FakeResponse({"capabilities": caps})
     if url.endswith("/api/embed"):
         inputs = payload.get("input") or []
         if isinstance(inputs, str):

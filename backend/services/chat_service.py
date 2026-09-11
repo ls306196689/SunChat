@@ -1,11 +1,14 @@
 """
 SunChat Backend - Chat Service with Logging
 """
+import base64
 import threading
+import time
 import uuid
 import json
 import re
-from typing import List, Dict, Optional, AsyncGenerator
+from pathlib import Path
+from typing import List, Dict, Optional, AsyncGenerator, Tuple
 from datetime import datetime
 
 from app.config import settings
@@ -19,6 +22,33 @@ from services.memory_service import memory_service
 from models.sql_models import DBSessionMixin, ChatSession, Message
 from models.schemas import MessageCreate, MemoryResponse
 from utils.logger import chat_logger, memory_logger, logger
+
+
+# ==================== R-008: 对话图片工具 ====================
+
+_IMG_B64_TTL = 60  # base64 读取缓存秒数（同 stock TTL 语义）
+_IMG_B64_CACHE: Dict[str, Tuple[float, str]] = {}
+_IMG_CACHE_LOCK = threading.Lock()
+
+
+def image_b64(image_id: str) -> Optional[str]:
+    """读对话图片文件 → base64 文本（带 TTL 缓存）；文件缺失/不可读 → None。"""
+    with _IMG_CACHE_LOCK:
+        hit = _IMG_B64_CACHE.get(image_id)
+        if hit and time.monotonic() - hit[0] < _IMG_B64_TTL:
+            return hit[1]
+    import app.config as _cfg  # 运行时读取(reload 兼容,同 sql_models 模式)
+    path = Path(_cfg.settings.CHAT_IMAGE_DIR) / image_id
+    if not path.is_file():
+        return None
+    try:
+        data = base64.b64encode(path.read_bytes()).decode()
+    except OSError as e:
+        logger.warning(f"[CHAT] 图片读取失败 {image_id}: {e}")
+        return None
+    with _IMG_CACHE_LOCK:
+        _IMG_B64_CACHE[image_id] = (time.monotonic(), data)
+    return data
 
 
 class ChatService(DBSessionMixin):
@@ -61,6 +91,7 @@ class ChatService(DBSessionMixin):
                     "id": msg.id,
                     "role": msg.role,
                     "content": msg.content,
+                    "images": json.loads(msg.images or "[]"),  # R-008
                     "created_at": msg.created_at.isoformat()
                 }
                 for msg in messages
@@ -237,8 +268,9 @@ AI 回答: {ai_response}
             .all()
         )
         rows = list(reversed(rows))
-        return [{"role": m.role, "content": m.content} for m in rows
-                if m.role in ("user", "assistant")]
+        return [{"role": m.role, "content": m.content,
+                 "images": json.loads(m.images or "[]")}  # R-008: 上下文窗口带图
+                for m in rows if m.role in ("user", "assistant")]
 
     def build_context(self, user_id: int, session_id: int, content: str,
                       memory_enabled: bool = True, search_enabled: bool = True) -> Dict:
@@ -338,15 +370,66 @@ AI 回答: {ai_response}
             "sources": sources,
         }
 
-    def to_chat_messages(self, ctx: Dict, content: str) -> List[Dict]:
-        """转成 Ollama /api/chat 消息序列：system 单份 + 多轮历史 + 当前输入。"""
+    def to_chat_messages(self, ctx: Dict, content: str,
+                         images: List[str] = None,
+                         ) -> List[Dict]:
+        """转成 Ollama /api/chat 消息序列：system 单份 + 多轮历史 + 当前输入。
+
+        R-008: images（当前附图 image_id 列表）注入当前 user 消息 base64；
+        历史窗口内带图消息（最近 CHAT_IMAGE_WINDOW_MSGS 条、每条≤CHAT_IMAGE_MAX_PER_MSG、
+        总≤CHAT_IMAGE_TOTAL_MAX 含当前）注入历史 base64；
+        非 vision 模型自动 strip（D-402）。
+        时序注:build_context 先于 save_user_message,故 history 不含当前消息,无需去重。
+        """
         messages = [{"role": "system", "content": ctx["system_prompt"]}]
-        messages += [{"role": m["role"], "content": m["content"]} for m in ctx["history"]]
-        messages.append({"role": "user", "content": content})
+        cur_imgs = list(images or [])[:settings.CHAT_IMAGE_MAX_PER_MSG]
+
+        # 历史窗口收集（仅 user 带图消息,从新到旧;流式路径跳过已落库的当前消息）
+        hist = ctx["history"]
+        budget = max(settings.CHAT_IMAGE_TOTAL_MAX - len(cur_imgs), 0)
+        hist_b64: Dict[int, List[str]] = {}  # history索引 → b64列表（从新到旧消费预算）
+        window_imgs: List[Tuple[int, List[str]]] = []
+        for idx in range(len(hist) - 1, -1, -1):
+            m = hist[idx]
+            m_imgs = m.get("images") or []
+            if m["role"] == "user" and m_imgs:
+                window_imgs.append((idx, m_imgs[:settings.CHAT_IMAGE_MAX_PER_MSG]))
+                if len(window_imgs) >= settings.CHAT_IMAGE_WINDOW_MSGS:
+                    break
+        for idx, m_imgs in window_imgs:
+            if budget <= 0:
+                break
+            take = m_imgs[:budget]
+            budget -= len(take)
+            hist_b64[idx] = [b for iid in take
+                             if (b := image_b64(iid)) is not None]
+
+        for idx, m in enumerate(hist):
+            msg = {"role": m["role"], "content": m["content"]}
+            if idx in hist_b64 and hist_b64[idx]:
+                msg["images"] = hist_b64[idx]
+            messages.append(msg)
+
+        user_msg: Dict = {"role": "user", "content": content}
+        if cur_imgs:
+            b64s = [b for iid in cur_imgs if (b := image_b64(iid)) is not None]
+            if b64s:
+                user_msg["images"] = b64s
+        messages.append(user_msg)
+
+        # 非 vision 模型：剥离全部 images（可用性优先，D-402）
+        if any("images" in m for m in messages):
+            from core.model_manager import model_manager
+            if not model_manager.supports_vision():
+                logger.warning("[CHAT] 当前模型不支持 vision，本请求图片已剥离（仅文字）")
+                for m in messages:
+                    m.pop("images", None)
         return messages
 
-    def save_user_message(self, session_id: int, content: str) -> Message:
-        msg = Message(session_id=session_id, role="user", content=content)
+    def save_user_message(self, session_id: int, content: str,
+                          images: List[str] = None) -> Message:
+        msg = Message(session_id=session_id, role="user", content=content,
+                      images=json.dumps(list(images or [])))
         self.db.add(msg)
         self.db.commit()
         return msg
@@ -427,7 +510,8 @@ AI 回答: {ai_response}
 
     def process_message(self, user_id: int, session_id: int, content: str,
                        memory_enabled: bool = True, search_enabled: bool = True,
-                       model: str = None, extract_memory_inline: bool = False) -> Dict:
+                       model: str = None, extract_memory_inline: bool = False,
+                       images: List[str] = None) -> Dict:
         """
         处理用户消息（优化后流程）:
         1. 构建上下文：规则优先记忆路由 → 记忆检索 → 可选搜索接入 → 多轮历史
@@ -443,7 +527,7 @@ AI 回答: {ai_response}
         ctx = self.build_context(user_id, session_id, content,
                                  memory_enabled=memory_enabled,
                                  search_enabled=search_enabled)
-        messages = self.to_chat_messages(ctx, content)
+        messages = self.to_chat_messages(ctx, content, images=images)
 
         raw = ollama_service.chat(messages, model=model)
         response_content = raw.get("message", {}).get("content", "")
@@ -451,7 +535,7 @@ AI 回答: {ai_response}
         if not response_content:
             raise RuntimeError("LLM 返回空内容（服务可能不可用）")
 
-        self.save_user_message(session_id, content)
+        self.save_user_message(session_id, content, images=images)
         self.save_assistant_message(session_id, response_content, tokens_used)
 
         if memory_enabled:
@@ -505,9 +589,11 @@ AI 回答: {ai_response}
 
     # ==================== 流式（S5 共用上下文构建） ====================
 
-    def stream_reply(self, ctx: Dict, content: str, model: str = None):
-        """按上下文流式生成（同步 generator，逐块 yield 文本）。"""
-        return ollama_service.chat_stream(self.to_chat_messages(ctx, content),
+    def stream_reply(self, ctx: Dict, content: str, model: str = None,
+                     images: List[str] = None):
+        """按上下文流式生成（同步 generator，逐块 yield 文本）。R-008: 支持附图。"""
+        return ollama_service.chat_stream(self.to_chat_messages(ctx, content,
+                                                                images=images),
                                           model=model)
 
     def finalize_stream(self, user_id: int, session_id: int, content: str, full: str,

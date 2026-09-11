@@ -1,6 +1,6 @@
 # sunchat 需求台账
 
-当前需求 ID:R-013(下一个将分配) |
+当前需求 ID:R-014(下一个将分配) |
 设计基线:见 baseline.md
 
 ## 需求历史
@@ -25,3 +25,4 @@
 | R-010 | 视频输入 V3(PyAV 抽帧复用图片通道) | iteration | done | chat-image 附录 | 2026-09-11 |
 | R-011 | 图片交互 UI 优化(上传态机+乐观预览+重试+拖拽遮罩+灯箱) | iteration | done | chat-image 附录二 | 2026-09-11 |
 | R-012 | 多模态响应字段路径修复(axios拦截器双解包致image_id恒undefined) | bugfix | done | - | 2026-09-11 |
+| R-013 | 日志体系完善(请求关联trace+环节事件evt+高频降噪聚合) | iteration | active | observability(新增) | 2026-09-11 |

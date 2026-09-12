@@ -1,10 +1,14 @@
 """
 SunChat Backend - Logger Utility
 提供统一的日志记录功能
+R-013: 请求级 trace 关联 + 环节事件(evt) + 高频降噪(阈值聚合)
 """
+import contextvars
 import logging
 import os
+import re
 import time
+import uuid
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from typing import Optional
@@ -19,9 +23,86 @@ LOG_MAX_BYTES = 10 * 1024 * 1024  # 单文件 10MB
 LOG_BACKUP_COUNT = 7               # 滚动保留 7 份
 LOG_RETENTION_DAYS = 30            # 历史日志保留 30 天
 
-# 配置日志格式
-LOG_FORMAT = '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s'
+# 配置日志格式（R-013: 新增 trace 列 %(trace)s → [r=xxxxxx]）
+LOG_FORMAT = '%(asctime)s | %(levelname)-8s | %(trace)s | %(name)s | %(message)s'
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+# 聚合降噪阈值：同模板 WARNING+ 每满 N 条放出一条重复摘要（首条必放行）
+AGG_THRESHOLD = 20
+
+# ==================== R-013: trace 上下文 ====================
+_trace_var: contextvars.ContextVar[str] = contextvars.ContextVar("trace", default="-")
+
+
+def new_trace() -> str:
+    """生成 6 位短 trace 码。"""
+    return uuid.uuid4().hex[:6]
+
+
+def set_trace(value: str):
+    """设置当前上下文 trace,返回 token(供 reset)。"""
+    return _trace_var.set(value or "-")
+
+
+def reset_trace(token) -> None:
+    try:
+        _trace_var.reset(token)
+    except (ValueError, LookupError):
+        pass
+
+
+def get_trace() -> str:
+    return _trace_var.get()
+
+
+class TraceFilter(logging.Filter):
+    """为每条 record 注入 trace 字段(取当前上下文)。"""
+
+    def filter(self, record):
+        if not hasattr(record, "trace"):
+            record.trace = f"[r={_trace_var.get()}]"
+        return True
+
+
+_DIGITS = re.compile(r"\d+")
+
+
+class AggregatingFilter(logging.Filter):
+    """高频降噪：同模板 WARNING+ 抑制,首条必放行,每满 threshold 放出一条重复摘要。
+
+    - evt= 事件行(record.no_agg=True)永不聚合(保证"成功失败都有记录"底线)。
+    - 模板 = 级别 + 数字掩码后的消息前缀,使 attempt1/2/3、count 变化归并。
+    - 计数达 threshold 整数倍 → 放行 `[repeat×N]` 摘要,持续可见但不刷屏。
+    """
+
+    def __init__(self, threshold: int = AGG_THRESHOLD):
+        super().__init__()
+        self.threshold = max(2, int(threshold))
+        self._counts = {}
+
+    def _key(self, record) -> str:
+        msg = record.getMessage()
+        return f"{record.levelno}|{_DIGITS.sub('#', msg)[:72]}"
+
+    def filter(self, record):
+        if record.levelno < logging.WARNING:
+            return True
+        if getattr(record, "no_agg", False):
+            return True
+        key = self._key(record)
+        self._counts[key] = self._counts.get(key, 0) + 1
+        c = self._counts[key]
+        if c == 1:
+            return True  # 首见必全量放行
+        if c % self.threshold == 0:
+            record.msg = f"{record.getMessage()}  [repeat×{c}]"
+            record.args = None
+            return True
+        return False
+
+    def reset(self):
+        self._counts.clear()
+
 
 
 def _cleanup_old_logs():
@@ -41,6 +122,11 @@ def _cleanup_old_logs():
         pass
 
 
+# 聚合/trace 过滤器共享实例(按 handler 挂载,状态进程级)
+_agg_filter = AggregatingFilter()
+_trace_filter = TraceFilter()
+
+
 def get_logger(name: str = 'sunchat') -> logging.Logger:
     """获取配置好的日志器"""
     logger = logging.getLogger(name)
@@ -58,15 +144,55 @@ def get_logger(name: str = 'sunchat') -> logging.Logger:
         encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
+    file_handler.addFilter(_trace_filter)   # R-013: 注入 trace
+    file_handler.addFilter(_agg_filter)     # R-013: 高频降噪
     logger.addHandler(file_handler)
 
     # 控制台处理器
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
+    console_handler.addFilter(_trace_filter)
+    console_handler.addFilter(_agg_filter)
     logger.addHandler(console_handler)
 
     return logger
+
+
+# ==================== R-013: 环节事件 ====================
+
+def log_event(log: logging.Logger, domain: str, action: str, result: str,
+              exc: bool = False, **fields) -> None:
+    """环节事件行:`evt=<domain>.<action> result=<ok|fail|skip> k=v …`
+
+    关键环节统一入口——成功失败皆记(验收基线);fail 建议 exc=True 带堆栈。
+    以 extra(no_agg) 豁免降噪,字段做竖线/换行净化防日志注入。
+    """
+    parts = [f"evt={domain}.{action}", f"result={result}"]
+    for k, v in fields.items():
+        s = str(v)
+        if len(s) > 120:
+            s = s[:117] + "..."
+        parts.append(f"{k}={s.replace('|', '/').replace(chr(10), ' ')}")
+    level = logging.ERROR if result == "fail" else logging.INFO
+    log.log(level, " ".join(parts), exc_info=exc,
+            extra={"no_agg": True, "trace": f"[r={get_trace()}]"})
+
+
+# ==================== R-013: uvicorn 接入治理 ====================
+
+def setup_uvicorn_logging() -> None:
+    """uvicorn.access 由自有请求摘要中间件替代(R-013/D-703);error 流保留。
+
+    第三方库降噪:httpx/httpcore/urllib3/chromadb/numexpr INFO→WARNING。
+    幂等。"""
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    for noisy in ("httpx", "httpcore", "urllib3", "chromadb", "numexpr",
+                  "sentence_transformers", "huggingface_hub"):
+        logging.getLogger(noisy).setLevel(
+            max(logging.WARNING, logging.getLogger(noisy).level))
+
+
 
 
 # 全局日志器实例

@@ -11,7 +11,7 @@ from typing import List, Dict, Optional
 import requests
 
 from app.config import settings
-from utils.logger import logger
+from utils.logger import logger, log_event
 
 # 常见聊天模型前缀（用于从 Ollama 模型列表中识别聊天模型）
 CHAT_MODEL_PREFIXES = ["qwen", "llama", "glm", "deepseek", "mistral", "yi", "gemma", "phi", "codellama", "starcoder"]
@@ -118,7 +118,9 @@ class ModelManager:
         return self._available_cache or []
 
     def is_available(self) -> bool:
-        """Ollama 服务是否在线（R-006: 结果缓存 HEALTH_AVAIL_TTL 秒,与 R-003 探活缓存同语义）"""
+        """Ollama 服务是否在线（R-006: 结果缓存 HEALTH_AVAIL_TTL 秒,与 R-003 探活缓存同语义）
+
+        R-013: 探活降噪——结果不变静默(debug),状态翻转才 info 一条(边沿触发)。"""
         now = time.monotonic()
         if self._avail_flag is not None and (now - self._avail_ts) < self._avail_ttl:
             return self._avail_flag
@@ -128,8 +130,14 @@ class ModelManager:
             val = resp.status_code == 200
         except Exception:
             val = False
+        prev = self._avail_flag
         self._avail_flag = val
         self._avail_ts = now
+        if prev is not None and prev != val:
+            log_event(logger, "model", "availability", "ok" if val else "fail",
+                      flipped=True, prev=prev)
+        else:
+            logger.debug(f"[MODEL] 探活结果: {val}")
         return val
 
     def invalidate_availability_cache(self) -> None:

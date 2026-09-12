@@ -9,6 +9,7 @@ from app.config import settings
 from core.security import sanitize_input
 from services.search_service import search_svc
 from services.memory_service import memory_service
+from utils.logger import logger, log_event
 
 router = APIRouter()
 
@@ -66,6 +67,8 @@ def perform_search(request: SearchRequest):
         db.commit()
         db.refresh(search_history)
 
+        log_event(logger, "search", "query", "ok", intent=route_result["intent"],
+                  results=len(results), memory=len(memories))
         return {
             "code": 200,
             "message": "success",
@@ -79,6 +82,7 @@ def perform_search(request: SearchRequest):
     except HTTPException:
         raise
     except Exception as e:
+        log_event(logger, "search", "query", "fail", error=str(e)[:120], exc=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

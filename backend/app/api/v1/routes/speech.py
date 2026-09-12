@@ -4,7 +4,7 @@ SunChat Backend - Speech Route (R-009 语音输入)
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
-from utils.logger import logger
+from utils.logger import logger, log_event
 
 router = APIRouter()
 
@@ -46,9 +46,12 @@ async def transcribe(file: UploadFile = File(...)):
     max_bytes = cfg.SPEECH_MAX_MB * 1024 * 1024
     data = await file.read(max_bytes + 1)
     if len(data) > max_bytes:
+        log_event(logger, "speech", "transcribe", "fail", reason="oversize",
+                  size_mb=round(len(data) / 1048576, 1))
         raise HTTPException(status_code=413,
                             detail=f"音频超过 {cfg.SPEECH_MAX_MB}MB 限制")
     if not _sniff_audio(data[:16]):
+        log_event(logger, "speech", "transcribe", "fail", reason="bad_magic")
         raise HTTPException(status_code=400,
                             detail="不支持的音频格式(wav/mp3/m4a/ogg/webm)")
 
@@ -58,10 +61,17 @@ async def transcribe(file: UploadFile = File(...)):
         result = await run_in_threadpool(asr_service.transcribe, data)
     except RuntimeError as e:
         # 模型缺失/加载失败 → 服务未就绪
+        log_event(logger, "speech", "transcribe", "fail", reason="not_ready",
+                  error=str(e)[:120])
         raise HTTPException(status_code=503, detail=f"语音模型未就绪: {e}")
     except ValueError as e:
+        log_event(logger, "speech", "transcribe", "fail", reason="decode",
+                  error=str(e)[:120])
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"[SPEECH] 转写异常: {e}")
+        log_event(logger, "speech", "transcribe", "fail", reason="internal",
+                  error=str(e)[:120], exc=True)
         raise HTTPException(status_code=500, detail="转写失败")
+    log_event(logger, "speech", "transcribe", "ok",
+              dur=result.get("duration"), text_len=len(result.get("text", "")))
     return {"code": 200, "message": "success", "data": result}

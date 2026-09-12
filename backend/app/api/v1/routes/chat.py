@@ -22,7 +22,7 @@ from app.config import settings
 from core.security import sanitize_input
 from services.chat_service import chat_service
 from services.memory_service import memory_service
-from utils.logger import logger
+from utils.logger import logger, log_event, get_trace, set_trace, reset_trace
 
 router = APIRouter()
 
@@ -113,15 +113,20 @@ async def upload_chat_image(file: UploadFile = File(...)):
     max_mb = _cfg().CHAT_IMAGE_MAX_MB
     data = await file.read(max_mb * 1024 * 1024 + 1)
     if len(data) > max_mb * 1024 * 1024:
+        log_event(logger, "chat.image", "upload", "fail", reason="oversize",
+                  size_mb=round(len(data) / 1048576, 1))
         raise HTTPException(status_code=413, detail=f"图片超过 {max_mb}MB 限制")
     sniffed = _sniff_image(data[:16])
     if not sniffed:
+        log_event(logger, "chat.image", "upload", "fail", reason="bad_magic")
         raise HTTPException(status_code=400, detail="不支持的图片格式(仅 png/jpg/gif/webp)")
     ext, _mt = sniffed
     image_id = f"{uuid.uuid4()}{ext}"  # 扩展名派生自魔数,不信任客户端 filename（R-005 教训）
     img_dir = Path(_cfg().CHAT_IMAGE_DIR)
     img_dir.mkdir(parents=True, exist_ok=True)
     (img_dir / image_id).write_bytes(data)
+    log_event(logger, "chat.image", "upload", "ok", image_id=image_id,
+              size_kb=len(data) // 1024)
     return {"code": 200, "message": "success", "data": {"image_id": image_id}}
 
 
@@ -160,9 +165,12 @@ async def extract_video_frames(file: UploadFile = File(...)):
     max_bytes = _cfg().VIDEO_MAX_MB * 1024 * 1024
     data = await file.read(max_bytes + 1)
     if len(data) > max_bytes:
+        log_event(logger, "chat.video", "frames", "fail", reason="oversize",
+                  size_mb=round(len(data) / 1048576, 1))
         raise HTTPException(status_code=413,
                             detail=f"视频超过 {_cfg().VIDEO_MAX_MB}MB 限制")
     if not _sniff_video(data[:16]):
+        log_event(logger, "chat.video", "frames", "fail", reason="bad_magic")
         raise HTTPException(status_code=400,
                             detail="不支持的视频格式(mp4/mov/avi/webm/flv)")
 
@@ -170,11 +178,15 @@ async def extract_video_frames(file: UploadFile = File(...)):
     try:
         frames, duration = await run_in_threadpool(extract_frames, data)
     except ValueError as e:
+        log_event(logger, "chat.video", "frames", "fail", reason="decode",
+                  error=str(e)[:120])
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"[VIDEO] 抽帧异常: {e}")
+        log_event(logger, "chat.video", "frames", "fail", reason="extract",
+                  error=str(e)[:120], exc=True)
         raise HTTPException(status_code=500, detail="视频处理失败")
     if not frames:
+        log_event(logger, "chat.video", "frames", "fail", reason="empty")
         raise HTTPException(status_code=400, detail="未解出任何视频帧")
 
     img_dir = Path(_cfg().CHAT_IMAGE_DIR)
@@ -184,6 +196,8 @@ async def extract_video_frames(file: UploadFile = File(...)):
         fid = f"{uuid.uuid4()}.jpg"
         (img_dir / fid).write_bytes(jpeg)
         frame_ids.append(fid)
+    log_event(logger, "chat.video", "frames", "ok", count=len(frame_ids),
+              duration_s=round(duration, 2))
     return {"code": 200, "message": "success",
             "data": {"frame_ids": frame_ids, "count": len(frame_ids),
                      "duration": round(duration, 2)}}
@@ -218,9 +232,10 @@ def create_message(request: ChatRequest):
         user_id = settings.LOCAL_USER_ID
 
         # 调用chat_service.process_message实现完整流程
+        sid = _resolve_session_id(request.session_id)
         result = chat_service.process_message(
             user_id=user_id,
-            session_id=_resolve_session_id(request.session_id),
+            session_id=sid,
             content=request.content,
             memory_enabled=request.memory_context,
             search_enabled=request.search_enabled,
@@ -228,6 +243,8 @@ def create_message(request: ChatRequest):
             images=_resolve_images(request.images)
         )
 
+        log_event(logger, "chat", "message", "ok", session_id=sid,
+                  tokens=result.get("tokens_used", 0), model=request.model or "default")
         return {
             "code": 200,
             "message": "success",
@@ -243,10 +260,14 @@ def create_message(request: ChatRequest):
 
     except RuntimeError as e:
         # LLM 不可用/空响应：明确 503，且不落空 assistant 消息
+        log_event(logger, "chat", "message", "fail", reason="llm_unavailable",
+                  error=str(e)[:120])
         raise HTTPException(status_code=503, detail=f"LLM 服务暂不可用: {e}")
     except HTTPException:
         raise
     except Exception as e:
+        log_event(logger, "chat", "message", "fail", reason="internal",
+                  error=str(e)[:120], exc=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -363,7 +384,10 @@ def stream_chat(request: StreamChatRequest):
     session_id = _resolve_session_id(request.session_id)
     images = _resolve_images(request.images)  # R-008: 流开始前完成校验(非法→400非SSE错误帧)
 
+    trace = get_trace()  # R-013: 显式带入 generator,防 to_thread 上下文丢失
+
     def gen():
+        token = set_trace(trace)
         try:
             ctx = chat_service.build_context(
                 user_id, session_id, request.content,
@@ -392,8 +416,14 @@ def stream_chat(request: StreamChatRequest):
             chat_service.finalize_stream(
                 user_id, session_id, request.content, text, ctx,
                 memory_enabled=request.memory_context)
+            log_event(logger, "chat", "stream", "ok", session_id=session_id,
+                      chars=len(text), images=len(images))
             yield _sse({"type": "done", "content": "", "done": True})
         except Exception as e:
+            log_event(logger, "chat", "stream", "fail", session_id=session_id,
+                      error=str(e)[:120], exc=True)
             yield _sse({"type": "error", "error": str(e), "done": True})
+        finally:
+            reset_trace(token)
 
     return StreamingResponse(gen(), media_type="text/event-stream")

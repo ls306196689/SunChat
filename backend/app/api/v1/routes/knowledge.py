@@ -10,7 +10,7 @@ from typing import List
 
 from app.config import settings
 from services.knowledge_service import knowledge_service
-from utils.logger import logger
+from utils.logger import logger, log_event
 
 router = APIRouter()
 
@@ -33,6 +33,8 @@ def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks 
         filename = file.filename or "unnamed"
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
         if ext not in _allowed_types():
+            log_event(logger, "kb", "upload", "fail", reason="bad_type",
+                      ext=ext, filename=filename[:80])
             raise HTTPException(
                 status_code=400,
                 detail=f"不支持的文件类型: {ext}（允许: {'/'.join(_allowed_types())}）",
@@ -54,6 +56,8 @@ def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks 
                 out.write(chunk)
         if size > max_bytes:
             os.remove(storage_path)
+            log_event(logger, "kb", "upload", "fail", reason="oversize",
+                      size_mb=round(size / 1048576, 1))
             raise HTTPException(status_code=413, detail=f"文件超过大小限制 {settings.MAX_UPLOAD_MB}MB")
 
         result = knowledge_service.upload_file(
@@ -70,6 +74,8 @@ def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks 
             knowledge_service.process_file, result["file_id"], storage_path, ext
         )
 
+        log_event(logger, "kb", "upload", "ok", file_id=result["file_id"],
+                  size_kb=size // 1024, ext=ext)
         return {
             "code": 201,
             "message": "文件上传成功，正在处理",
@@ -78,7 +84,8 @@ def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[KB] 上传失败: {e}")
+        log_event(logger, "kb", "upload", "fail", reason="internal",
+                  error=str(e)[:120], exc=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

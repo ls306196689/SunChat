@@ -10,7 +10,7 @@ from app.config import settings
 from core.security import sanitize_input
 from core.agent.agent import agent
 from services.chat_service import chat_service
-from utils.logger import logger
+from utils.logger import logger, log_event
 
 router = APIRouter()
 
@@ -46,6 +46,9 @@ def agent_chat(request: AgentRequest):
 
         content = result.get("content", "")
         if not content:
+            log_event(logger, "agent", "run", "fail",
+                      reason="empty_answer",
+                      error=str(result.get("error", "LLM 不可用"))[:120])
             raise HTTPException(
                 status_code=503,
                 detail=f"Agent 未产生答案: {result.get('error', 'LLM 不可用')}")
@@ -54,9 +57,9 @@ def agent_chat(request: AgentRequest):
             chat_service.save_user_message(session_id, request.content)
             chat_service.save_assistant_message(session_id, content)
 
-        logger.info(f"[AGENT] 完成 - mode:{result.get('mode')}, "
-                    f"iterations:{result.get('iterations')}, "
-                    f"tools:{[t['tool'] for t in result.get('tool_trace', [])]}")
+        log_event(logger, "agent", "run", "ok", mode=result.get("mode"),
+                  iterations=result.get("iterations"),
+                  tools=[t['tool'] for t in result.get('tool_trace', [])])
 
         return {
             "code": 200,
@@ -71,5 +74,6 @@ def agent_chat(request: AgentRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[AGENT] 端点失败: {e}")
+        log_event(logger, "agent", "run", "fail", reason="internal",
+                  error=str(e)[:120], exc=True)
         raise HTTPException(status_code=500, detail=str(e))

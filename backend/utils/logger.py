@@ -136,6 +136,9 @@ def get_logger(name: str = 'sunchat') -> logging.Logger:
         return logger
 
     logger.setLevel(logging.DEBUG)
+    if "." in name:
+        # R-013: 子 logger(如 sunchat.http)自带 handler,停止向父 logger 传播防双写
+        logger.propagate = False
 
     # 文件处理器(R-004: 轮转封顶,单文件 10MB × 7 份;跨日仍按日新文件)
     _cleanup_old_logs()
@@ -162,10 +165,11 @@ def get_logger(name: str = 'sunchat') -> logging.Logger:
 # ==================== R-013: 环节事件 ====================
 
 def log_event(log: logging.Logger, domain: str, action: str, result: str,
-              exc: bool = False, **fields) -> None:
+              exc: bool = False, level: Optional[int] = None, **fields) -> None:
     """环节事件行:`evt=<domain>.<action> result=<ok|fail|skip> k=v …`
 
     关键环节统一入口——成功失败皆记(验收基线);fail 建议 exc=True 带堆栈。
+    level 显式覆盖(R-013: http 4xx 拒绝记 WARNING,5xx/异常仍 ERROR)。
     以 extra(no_agg) 豁免降噪,字段做竖线/换行净化防日志注入。
     """
     parts = [f"evt={domain}.{action}", f"result={result}"]
@@ -174,7 +178,8 @@ def log_event(log: logging.Logger, domain: str, action: str, result: str,
         if len(s) > 120:
             s = s[:117] + "..."
         parts.append(f"{k}={s.replace('|', '/').replace(chr(10), ' ')}")
-    level = logging.ERROR if result == "fail" else logging.INFO
+    if level is None:
+        level = logging.ERROR if result == "fail" else logging.INFO
     log.log(level, " ".join(parts), exc_info=exc,
             extra={"no_agg": True, "trace": f"[r={get_trace()}]"})
 

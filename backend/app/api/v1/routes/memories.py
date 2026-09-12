@@ -8,6 +8,7 @@ from typing import List, Dict, Optional
 from app.config import settings
 from core.security import sanitize_input
 from services.memory_service import memory_service
+from utils.logger import logger
 
 router = APIRouter()
 
@@ -50,6 +51,7 @@ def list_memories(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"[MEM] 请求处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -78,6 +80,7 @@ def search_memories(request: MemorySearchRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"[MEM] 请求处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -105,6 +108,7 @@ def create_memory(request: MemoryCreateRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"[MEM] 请求处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -126,6 +130,7 @@ def update_memory(memory_id: str, request: MemoryCreateRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"[MEM] 请求处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -144,6 +149,7 @@ def delete_memory(memory_id: str):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"[MEM] 请求处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -160,4 +166,5 @@ def get_memory_stats():
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"[MEM] 请求处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

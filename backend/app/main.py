@@ -55,13 +55,16 @@ async def lifespan(app: FastAPI):
             from core.model_manager import model_manager
             if model_manager.is_available():
                 from services.storage_service import storage_service
+                from utils.logger import log_event
                 r = storage_service.reconcile()
                 p = storage_service.prune_orphan_vectors()
                 from core.fts_index import fts_bootstrap_from_sqlite
                 fts_bootstrap_from_sqlite()
-                logger.info(f"[STARTUP] 记忆对账: {r} 孤儿清理: {p}")
+                log_event(logger, "storage", "reconcile", "ok",
+                          result=str(r)[:120], pruned=p)
         except Exception as e:
-            logger.warning(f"[STARTUP] 记忆对账失败(不阻断): {e}")
+            log_event(logger, "storage", "reconcile", "fail",
+                      error=str(e)[:120], exc=True)
 
     yield
 
@@ -88,6 +91,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # R-013: trace 注入 + 访问摘要(置于 CORS 外层,统一请求观测面)
+    from utils.logger import setup_uvicorn_logging
+    from app.middleware import RequestLogMiddleware
+    app.add_middleware(RequestLogMiddleware)
+    setup_uvicorn_logging()
 
     # 路由注册
     app.include_router(health.router, prefix="/api/v1", tags=["health"])

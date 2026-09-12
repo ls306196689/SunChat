@@ -2,6 +2,7 @@
 SunChat Backend - Chat Service with Logging
 """
 import base64
+import contextvars
 import threading
 import time
 import uuid
@@ -21,7 +22,7 @@ from core.memory_extractor import memory_extractor
 from services.memory_service import memory_service
 from models.sql_models import DBSessionMixin, ChatSession, Message
 from models.schemas import MessageCreate, MemoryResponse
-from utils.logger import chat_logger, memory_logger, logger
+from utils.logger import chat_logger, memory_logger, logger, log_event
 
 
 # ==================== R-008: 对话图片工具 ====================
@@ -468,16 +469,19 @@ AI 回答: {ai_response}
                     mem_data["action"] = result.get("action", "created")
                     memory_updates.append(mem_data)
                 except Exception as e:
-                    logger.error(f"[CHAT] 更新/创建记忆失败 - 错误:{e}")
+                    logger.error(f"[CHAT] 更新/创建记忆失败 - 错误:{e}", exc_info=True)
+            log_event(logger, "memory", "extract", "ok", saved=len(memory_updates))
         except Exception as e:
-            logger.error(f"[CHAT] 记忆处理失败 - 错误:{e}")
+            log_event(logger, "memory", "extract", "fail",
+                      error=str(e)[:120], exc=True)
         return memory_updates
 
     def extract_memories_async(self, user_id: int, content: str,
                                response_content: str,
                                memory_context: List[Dict]):
         """R-007: 有界线程池执行记忆提取（max_workers=2,在途≤8）,不阻塞响应；
-        超限丢弃记 WARNING（主链路优先,记忆可后补）;失败只记日志。"""
+        超限丢弃记 WARNING（主链路优先,记忆可后补）;失败只记日志。
+        R-013: copy_context 包裹任务,后台线程继承请求 trace(AC-1)。"""
         def _job():
             try:
                 self.apply_memory_extraction(user_id, content, response_content,
@@ -506,7 +510,8 @@ AI 回答: {ai_response}
                 self._extract_pool = ThreadPoolExecutor(
                     max_workers=self._extract_workers,
                     thread_name_prefix="memory-extractor")
-            return self._extract_pool.submit(_job)
+            ctx = contextvars.copy_context()  # R-013: trace 继承进线程池
+            return self._extract_pool.submit(ctx.run, _job)
 
     def process_message(self, user_id: int, session_id: int, content: str,
                        memory_enabled: bool = True, search_enabled: bool = True,

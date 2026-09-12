@@ -165,9 +165,44 @@ class TestEvents:
         assert "[r=-]" in out
         lg.handlers.clear()
 
-    def test_speech_video_status_endpoints_have_events(self, client, http_capture):
-        r = client.get("/api/v1/speech/status")
+    def test_speech_transcribe_events(self, client, monkeypatch):
+        cap = Capture()
+        lg = logging.getLogger("sunchat")
+        lg.addHandler(cap)
+
+        class FakeASR:
+            def transcribe(self, audio):
+                return {"text": "你好", "language": "zh", "duration": 1.2}
+        monkeypatch.setattr("core.asr.asr_service", FakeASR())
+        wav = b"RIFF" + b"\x00" * 4 + b"WAVE" + b"x" * 32
+        r = client.post("/api/v1/speech/transcribe",
+                        files={"file": ("a.wav", wav, "audio/wav")})
         assert r.status_code == 200
+        ok = [l for l in cap.lines if "evt=speech.transcribe result=ok" in l]
+        assert ok and "text_len=2" in ok[0] and "你好" not in ok[0]  # 不记转写文本
+
+        class BoomASR:
+            def transcribe(self, audio):
+                raise ValueError("decode boom")
+        monkeypatch.setattr("core.asr.asr_service", BoomASR())
+        r = client.post("/api/v1/speech/transcribe",
+                        files={"file": ("a.wav", wav, "audio/wav")})
+        assert r.status_code == 400
+        assert [l for l in cap.lines if "evt=speech.transcribe result=fail" in l
+                and "reason=decode" in l]
+        lg.removeHandler(cap)
+
+    def test_video_frames_fail_event(self, client):
+        cap = Capture()
+        lg = logging.getLogger("sunchat")
+        lg.addHandler(cap)
+        r = client.post("/api/v1/chat/video/frames",
+                        files={"file": ("v.mp4", b"not-a-video", "video/mp4")})
+        assert r.status_code == 400
+        assert [l for l in cap.lines
+                if "evt=chat.video.frames result=fail" in l
+                and "reason=bad_magic" in l]
+        lg.removeHandler(cap)
 
 
 # ==================== AC-3 访问摘要 ====================

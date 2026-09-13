@@ -7,7 +7,7 @@
     "R-015"
   ],
   "project": "sunchat",
-  "phase": "plan",
+  "phase": "execute",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -26,6 +26,12 @@
       "at": "2026-09-13T13:35:00+08:00",
       "confirmed_by": "user",
       "note": "question明示\"确认设计\",design-change.md全要点(diag端点/托管头/mobileDiag/埋点/阈值)"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-13T13:55:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认计划,开始执行\";gate:plan FAIL=0"
     }
   ],
   "clarifications": [
@@ -60,7 +66,26 @@
       "design_done": true
     }
   ],
-  "steps": [],
+  "steps": [
+    {
+      "id": 1,
+      "title": "后端diag+托管治理",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 2,
+      "title": "前端diag通道+规范化+埋点",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 3,
+      "title": "真机RUN+reqId对账",
+      "status": "in_progress",
+      "verified": false
+    }
+  ],
   "analyses": [
     {
       "id": "A-1",
@@ -135,5 +160,5 @@
     "last_pushed_commit": "724ab0a2",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T13:35:00+08:00"
+  "updated_at": "2026-09-13T14:10:00+08:00"
 }

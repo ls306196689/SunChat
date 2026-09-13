@@ -3,11 +3,27 @@
   "req_type": "bugfix",
   "base_requirements": ["R-014"],
   "project": "sunchat",
-  "phase": "micro_draft",
-  "gates": [],
+  "phase": "micro_execute",
+  "gates": [
+    {
+      "gate": "change_confirmed",
+      "at": "2026-09-13T12:12:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认,开始修复\"(方案两节全文+影响文件清单已呈现)"
+    },
+    {
+      "gate": "micro_design_confirmed",
+      "at": "2026-09-13T12:12:00+08:00",
+      "confirmed_by": "user",
+      "note": "同一question承载:方案设计节(App.vue裸渲染分支+提示行+回归设计)全文已呈现并获确认"
+    }
+  ],
   "clarifications": [],
   "modules": [],
-  "steps": [],
+  "steps": [
+    { "id": 1, "title": "App.vue /m 裸渲染分支 + SettingsView 提示行 + 断言脚本", "module": "frontend/src/App.vue, frontend/src/pages/SettingsView.vue, frontend/scripts/r015_check.mjs", "status": "in_progress", "verified": false },
+    { "id": 2, "title": "实机 AC-4 确认 + 基线回写", "module": "design/modules/mobile-pair.md, baseline.md", "status": "pending", "verified": false }
+  ],
   "analyses": [
     {
       "id": "A-1",

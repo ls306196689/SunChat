@@ -1,11 +1,14 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useThemeStore } from '@/stores/theme'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import HeaderBar from '@/components/layout/HeaderBar.vue'
 import { NConfigProvider, NMessageProvider, NLayout, NLayoutContent } from 'naive-ui'
 
 const themeStore = useThemeStore()
+const route = useRoute()
+const bare = computed(() => route.path === '/m')  // R-015: /m 脱离桌面壳(无侧栏/双头/页脚+溢出)
 
 // 主题配置
 const themeConfig = computed(() => ({
@@ -40,7 +43,9 @@ function toggleDarkMode() {
 
 <template>
   <n-config-provider :theme-overrides="themeConfig" :theme="themeStore.isDark ? 'dark' : null">
-    <n-message-provider>
+    <!-- R-015: /m 手机页裸渲染(100dvh 全屏,无桌面侧栏/HeaderBar/页脚,修复溢出裁切) -->
+    <router-view v-if="bare" />
+    <n-message-provider v-else>
       <n-layout has-sider class="app-layout">
         <Sidebar />
         

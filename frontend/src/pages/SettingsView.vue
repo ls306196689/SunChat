@@ -205,7 +205,7 @@ function handleClearCache() {
           <div>
             <p style="margin:0 0 6px;">手机浏览器扫一扫,或手动访问:</p>
             <code style="font-size:13px; word-break:break-all;">{{ pair.url }}</code>
-            <p style="margin:8px 0 0; font-size:12px; color:#999;">与电脑处于同一 Wi-Fi/局域网;打不开请检查本机防火墙是否放行端口 {{ pair.port }}。</p>
+            <p style="margin:8px 0 0; font-size:12px; color:#999;">与电脑处于同一 Wi-Fi/局域网;打不开请检查本机防火墙是否放行端口 {{ pair.port }}。开发模式(vite :5173)手机无法直连,请始终用手机访问上方 {{ pair.port }} 地址。</p>
             <n-button size="small" style="margin-top:8px;" @click="loadPair">刷新地址</n-button>
           </div>
         </div>

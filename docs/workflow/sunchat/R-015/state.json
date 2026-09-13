@@ -1,7 +1,9 @@
 {
   "req_id": "R-015",
   "req_type": "bugfix",
-  "base_requirements": ["R-014"],
+  "base_requirements": [
+    "R-014"
+  ],
   "project": "sunchat",
   "phase": "micro_execute",
   "gates": [
@@ -21,8 +23,20 @@
   "clarifications": [],
   "modules": [],
   "steps": [
-    { "id": 1, "title": "App.vue /m 裸渲染分支 + SettingsView 提示行 + 断言脚本", "module": "frontend/src/App.vue, frontend/src/pages/SettingsView.vue, frontend/scripts/r015_check.mjs", "status": "in_progress", "verified": false },
-    { "id": 2, "title": "实机 AC-4 确认 + 基线回写", "module": "design/modules/mobile-pair.md, baseline.md", "status": "pending", "verified": false }
+    {
+      "id": 1,
+      "title": "App.vue /m 裸渲染分支 + SettingsView 提示行 + 断言脚本",
+      "module": "frontend/src/App.vue, frontend/src/pages/SettingsView.vue, frontend/scripts/r015_check.mjs",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 2,
+      "title": "实机 AC-4 确认 + 基线回写",
+      "module": "design/modules/mobile-pair.md, baseline.md",
+      "status": "pending",
+      "verified": false
+    }
   ],
   "analyses": [
     {
@@ -75,5 +89,5 @@
     "last_pushed_commit": "c6f118fc",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T12:05:00+08:00"
+  "updated_at": "2026-09-13T12:20:00+08:00"
 }

@@ -14,7 +14,7 @@ import re
 import uuid
 from typing import List, Dict, Optional, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
@@ -201,6 +201,107 @@ async def extract_video_frames(file: UploadFile = File(...)):
     return {"code": 200, "message": "success",
             "data": {"frame_ids": frame_ids, "count": len(frame_ids),
                      "duration": round(duration, 2)}}
+
+
+# ==================== R-017: 跑步姿态分析 ====================
+
+_POSE_REJECT_HINT = ("拍摄要点:侧面架机(路跑:相机外侧 5~8m 跑过正面；跑步机:侧面平行跑带)、"
+                     "全身入画、光线充足、跑过 2s 以上")
+
+
+@router.post("/chat/video/pose")
+async def analyze_video_pose(file: UploadFile = File(...), session_id: str = Form(...)):
+    """R-017: 跑姿分析。视频→关键点/步态/指标→骨架帧落盘→VLM/模板双路报告→assistant 消息落库。"""
+    from starlette.concurrency import run_in_threadpool
+    sid = _resolve_session_id(session_id)
+    max_bytes = _cfg().VIDEO_MAX_MB * 1024 * 1024
+    data = await file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        log_event(logger, "pose.analyze", "run", "fail", reason="oversize",
+                  size_mb=round(len(data) / 1048576, 1))
+        raise HTTPException(status_code=413, detail=f"视频超过 {_cfg().VIDEO_MAX_MB}MB 限制")
+    if not _sniff_video(data[:16]):
+        log_event(logger, "pose.analyze", "run", "fail", reason="bad_magic")
+        raise HTTPException(status_code=400, detail="不支持的视频格式(mp4/mov/avi/webm/flv)")
+
+    from core.pose import PoseQualityError, analyze_video
+    from core.pose_skeleton import draw_skeleton, select_key_frames
+    from core.pose_report import build_report
+    import time as _t
+    t0 = _t.monotonic()
+
+    try:
+        result = await run_in_threadpool(analyze_video, data)
+    except PoseQualityError as e:
+        log_event(logger, "pose.analyze", "run", "fail", reason=e.reason)
+        raise HTTPException(status_code=400, detail=f"{e.detail}。{_POSE_REJECT_HINT}")
+    except FileNotFoundError as e:
+        log_event(logger, "pose.analyze", "run", "fail", reason="no_model", error=str(e)[:120])
+        raise HTTPException(status_code=503, detail="姿态模型未预置(运行 backend/scripts/fetch_pose_model.py)")
+    except Exception as e:
+        log_event(logger, "pose.analyze", "run", "fail", reason="decode",
+                  error=str(e)[:120], exc=True)
+        raise HTTPException(status_code=400, detail="视频解码失败,请换一段重新拍摄的视频")
+
+    # 相位骨架帧 → 落盘(R-008 约定);单次解码取全部目标帧
+    img_dir = Path(_cfg().CHAT_IMAGE_DIR)
+    img_dir.mkdir(parents=True, exist_ok=True)
+    picks = select_key_frames(result)
+    want_ts = [result.sample_ts[i] for i, _ in picks]
+    frames_at = await run_in_threadpool(_frames_at_ts, data, want_ts)
+    frame_ids, frame_b64s = [], []
+    import base64
+    import io as _io
+    import numpy as np
+    from PIL import Image as _PILImage
+    for (idx, _label), rgb in zip(picks, frames_at):
+        if rgb is None:
+            continue
+        jpeg_arr = draw_skeleton(rgb, result.landmarks_seq[idx])
+        buf = _io.BytesIO()
+        _PILImage.fromarray(np.asarray(jpeg_arr, dtype=np.uint8)).save(buf, format="JPEG", quality=85)
+        payload = buf.getvalue()
+        fid = f"{uuid.uuid4()}.jpg"
+        (img_dir / fid).write_bytes(payload)
+        frame_ids.append(fid)
+        frame_b64s.append(base64.b64encode(payload).decode())
+
+    report, report_source = build_report(result, frame_b64s)
+    extra = json.dumps({"pose_metrics": result.metrics, "pose_quality": result.quality,
+                        "report_source": report_source}, ensure_ascii=False)
+    msg = chat_service.save_assistant_message(
+        sid, report, images=frame_ids, extra=extra)
+
+    log_event(logger, "pose.analyze", "run", "ok",
+              frames=len(result.landmarks_seq), cycles=result.quality["cycles"],
+              cadence=result.metrics.get("cadence_spm"), skeleton=len(frame_ids),
+              report=report_source, total_ms=int((_t.monotonic() - t0) * 1000))
+    return {"code": 200, "message": "success",
+            "data": {"report": report, "report_source": report_source,
+                     "frame_ids": frame_ids, "metrics": result.metrics,
+                     "quality": result.quality, "message_id": msg.id}}
+
+
+def _frames_at_ts(data: bytes, target_ts: List[float]) -> List[Optional[object]]:
+    """单次解码,对每个目标时间戳取最近帧 RGB(P2 纯函数接口的 P4 取帧层)。"""
+    import av, io as _io
+    import numpy as np
+    if not target_ts:
+        return []
+    out: List[Optional[np.ndarray]] = [None] * len(target_ts)
+    best = [None] * len(target_ts)  # (|dt|, arr)
+    try:
+        c = av.open(_io.BytesIO(data))
+        for f in c.decode(video=0):
+            t = float(f.pts * f.time_base) if (f.pts is not None and f.time_base) else 0.0
+            for i, tt in enumerate(target_ts):
+                d = abs(t - tt)
+                if best[i] is None or d < best[i][0]:
+                    best[i] = (d, np.asarray(f.to_image().convert("RGB")))
+        c.close()
+    except Exception:
+        pass
+    return [b[1] if b else None for b in best]
 
 
 class StreamResponse(BaseModel):

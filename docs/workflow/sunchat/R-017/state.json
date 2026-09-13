@@ -66,12 +66,13 @@
     },
     {
       "id": "6",
-      "status": "in_progress",
-      "title": "端点+迁移+单测"
+      "status": "done",
+      "title": "端点+迁移+单测",
+      "verified": true
     },
     {
       "id": "7",
-      "status": "pending",
+      "status": "in_progress",
       "title": "前端双端+构建断言"
     },
     {
@@ -163,7 +164,7 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T16:51:24+08:00",
+  "updated_at": "2026-09-13T16:55:25+08:00",
   "modules": [
     {
       "id": "P1",

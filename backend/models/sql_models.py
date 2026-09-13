@@ -257,6 +257,7 @@ class Message(Base):
     raw_response = Column(Text)  # LLM 原始响应
     tokens_used = Column(Integer, default=0)
     images = Column(Text, default="[]")  # R-008: 附图 image_id 列表（JSON）
+    extra = Column(Text)  # R-017: 扩展元数据 JSON（跑姿指标等,可空）
     created_at = Column(DateTime, default=func.now(), index=True)  # R-007: 消息排序分页
 
 
@@ -373,6 +374,10 @@ def ensure_schema():
         if "images" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE messages ADD COLUMN images TEXT DEFAULT '[]'"))
+        # R-017: messages.extra 扩展元数据列（旧库幂等补列）
+        if "extra" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE messages ADD COLUMN extra TEXT"))
 
     # R-007: 存量库幂等补齐热列索引（新库由模型 index=True 自动建，IF NOT EXISTS 双保险）
     _HOT_INDEXES = [

@@ -93,6 +93,7 @@ class ChatService(DBSessionMixin):
                     "role": msg.role,
                     "content": msg.content,
                     "images": json.loads(msg.images or "[]"),  # R-008
+                    "extra": msg.extra,  # R-017: 跑姿指标等扩展元数据(JSON 原文,可空)
                     "created_at": msg.created_at.isoformat()
                 }
                 for msg in messages
@@ -436,9 +437,12 @@ AI 回答: {ai_response}
         return msg
 
     def save_assistant_message(self, session_id: int, content: str,
-                               tokens_used: int = 0) -> Message:
+                               tokens_used: int = 0, images: List[str] = None,
+                               extra: str = None) -> Message:
+        # R-017: 默认参扩展(images/extra),既有调用方零改动
         msg = Message(session_id=session_id, role="assistant", content=content,
-                      raw_response=content, tokens_used=tokens_used)
+                      raw_response=content, tokens_used=tokens_used,
+                      images=json.dumps(list(images or [])), extra=extra)
         self.db.add(msg)
         self.db.commit()
         return msg

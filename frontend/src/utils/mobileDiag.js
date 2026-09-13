@@ -49,6 +49,13 @@ function safeTrunc(v) {
 
 function post(body, keepalive) {
   // 裸 fetch:避开业务 request 拦截器,静默失败(不递归诊断)
+  // iOS pagehide 后 fetch 会被杀——beacon 优先,fetch keepalive 兜底(R-016/B-④)
+  if (navigator.sendBeacon) {
+    try {
+      if (navigator.sendBeacon(`${API}/diag/client`,
+          new Blob([JSON.stringify(body)], { type: 'application/json' }))) return Promise.resolve()
+    } catch { /* 落 fetch */ }
+  }
   return fetch(`${API}/diag/client`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -115,8 +122,15 @@ export function diagInit(pg) {
   if (initialized) return
   initialized = true
   page = pg
-  // 页面进入(一次);离开/隐藏 flush(keepalive 尽力送达)
-  diagStep('page.enter', { ua: navigator.userAgent.slice(0, 120), href: location.href })
+  window.__sunchat_entered = true  // canary js.hung 判据(R-016)
+  window.dispatchEvent(new Event('sunchat:entered'))
+  // 页面进入(一次,含设备信息,B-③);离开/隐藏 flush
+  diagStep('page.enter', {
+    ua: navigator.userAgent.slice(0, 120), href: location.href,
+    plat: navigator.platform || '', lang: navigator.language || '',
+    scr: `${screen.width}x${screen.height}`, dpr: String(window.devicePixelRatio || 1),
+    net: navigator.connection ? `${navigator.connection.effectiveType}|${navigator.connection.type}` : '',
+  })
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush(true)
   })

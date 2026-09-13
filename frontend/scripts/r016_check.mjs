@@ -33,6 +33,12 @@ t('test_mobileview_instrumented',
   mv.includes('upload.pick') && mv.includes('upload.start') &&
   mv.includes('upload.ok') && mv.includes('diagError') && mv.includes('reqId'))
 
+const idx = read('../index.html')
+t('test_inline_canary',
+  idx.includes('page.canary') && idx.includes('js.hung') && idx.includes('unhandledrejection') &&
+  idx.includes('sendBeacon'))
+t('test_diag_beacon_path', dg.includes('sendBeacon'))
+
 t('test_r014_invariants', mv.includes('useChatStore') && mv.includes('getUserMedia'))
 
 const distDir = new URL('../dist/assets/', import.meta.url)

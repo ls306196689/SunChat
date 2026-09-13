@@ -5,6 +5,46 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SunChat - 个人智能聊天系统</title>
+    <!-- R-016: 内联诊断 canary——不经构建链/不受模块加载与 drop_console 影响,
+         页面一打开即上报;应用未起来 2.5s 后报 js.hung。诊断通道先于被诊断者存活。 -->
+    <script>
+      (function () {
+        var sent = { canary: false, enter: false }
+        function send(step, msg, extra) {
+          try {
+            var body = JSON.stringify({ page: location.pathname, events: [{
+              ts: Date.now(), lvl: step === 'js.error' ? 'err' : 'info',
+              step: step, msg: String(msg || step).slice(0, 400),
+              extra: Object.assign({
+                ua: navigator.userAgent.slice(0, 140), href: location.href.slice(0, 160),
+                plat: navigator.platform || '', lang: navigator.language || '',
+                scr: screen.width + 'x' + screen.height, dpr: String(window.devicePixelRatio || 1)
+              }, extra || {})
+            }] })
+            if (navigator.sendBeacon) {
+              if (navigator.sendBeacon('/api/v1/diag/client',
+                  new Blob([body], { type: 'application/json' }))) return
+            }
+            fetch('/api/v1/diag/client', { method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: body, keepalive: true }).catch(function () {})
+          } catch (e) {}
+        }
+        send('page.canary', 'inline-boot')
+        window.addEventListener('error', function (ev) {
+          send('js.error', (ev.message || 'error') + ' @' +
+            String(ev.filename || '').slice(-40) + ':' + ev.lineno + ':' + ev.colno)
+        }, true)
+        window.addEventListener('unhandledrejection', function (ev) {
+          var r = ev.reason
+          send('js.error', 'unhandledrejection: ' + ((r && r.message) || String(r)).slice(0, 200))
+        })
+        setTimeout(function () {
+          if (!window.__sunchat_entered) send('js.hung', 'app-not-mounted-in-2500ms')
+        }, 2500)
+        window.addEventListener('sunchat:entered', function () { sent.enter = true })
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -257,7 +257,8 @@ async def analyze_video_pose(file: UploadFile = File(...), session_id: str = For
     for (idx, _label), rgb in zip(picks, frames_at):
         if rgb is None:
             continue
-        jpeg_arr = draw_skeleton(rgb, result.landmarks_seq[idx])
+        jpeg_arr = draw_skeleton(rgb, result.landmarks_seq[idx],
+                                 crop_bbox=getattr(result, "crop_bbox", None))
         buf = _io.BytesIO()
         _PILImage.fromarray(np.asarray(jpeg_arr, dtype=np.uint8)).save(buf, format="JPEG", quality=85)
         payload = buf.getvalue()
@@ -275,7 +276,12 @@ async def analyze_video_pose(file: UploadFile = File(...), session_id: str = For
     log_event(logger, "pose.analyze", "run", "ok",
               frames=len(result.landmarks_seq), cycles=result.quality["cycles"],
               cadence=result.metrics.get("cadence_spm"), skeleton=len(frame_ids),
-              report=report_source, total_ms=int((_t.monotonic() - t0) * 1000))
+              report=report_source,
+              fps_eff=result.quality.get("fps_eff"), slo=result.quality.get("slo_factor"),
+              span=result.quality.get("activity_span"),
+              pace="y" if result.metrics.get("pace") else "n",
+              crop="y" if getattr(result, "crop_bbox", None) else "n",
+              total_ms=int((_t.monotonic() - t0) * 1000))
     return {"code": 200, "message": "success",
             "data": {"report": report, "report_source": report_source,
                      "frame_ids": frame_ids, "metrics": result.metrics,

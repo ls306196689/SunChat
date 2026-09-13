@@ -44,9 +44,15 @@ def _mk_result():
     return PoseResult(
         metrics={"cadence_spm": 172.0, "stance_swing_ratio": 0.8,
                  "knee_angle_at_contact_deg": 160.0, "knee_angle_at_toeoff_deg": 60.0,
-                 "hip_rom_deg": 50.0, "pelvic_tilt_deg": 2.0, "asymmetry_pct": 5.0},
-        quality={"mean_conf": 0.9, "body_ratio": 0.4, "cycles": 3, "score": 0.83},
-        cycles=cycles, landmarks_seq=lms, sample_ts=ts, video_duration=2.0)
+                 "hip_rom_deg": 50.0, "pelvic_tilt_deg": 2.0, "asymmetry_pct": 5.0,
+                 "pace": {"v_ms": 2.6, "kmh": 9.4, "min_per_km": 6.4,
+                          "pace_str": "6:25", "stride_m": 0.91, "height_cm": 175.0},
+                 "pace_reason": None},
+        quality={"mean_conf": 0.9, "body_ratio": 0.4, "cycles": 3, "score": 0.83,
+                 "fps_eff": 29.97, "fps_nominal": 30.0, "slo_factor": 1,
+                 "vfr": False, "activity_span": 1.7},
+        cycles=cycles, landmarks_seq=lms, sample_ts=ts, video_duration=2.0,
+        crop_bbox=(0.25, 0.25, 0.75, 0.75))
 
 
 def _patch_ok(monkeypatch):
@@ -85,6 +91,30 @@ class TestPoseEndpoint:
         assert "pose_metrics" in (hit[0].get("extra") or "")
         assert any("evt=pose.analyze" in l and "result=ok" in l for l in caplog.messages), "AC-6"
 
+    def test_v2_quality_passthrough_and_log_fields(self, client, monkeypatch, caplog):
+        """v2:quality 透明度键透传 + pace 入 extra + 日志带 fps_eff/span/pace/crop 位。"""
+        _patch_ok(monkeypatch)
+        with caplog.at_level("INFO"):
+            r = self._up(client, _synth_avi())
+        assert r.status_code == 200, r.text
+        q = r.json()["data"]["quality"]
+        assert q["fps_eff"] == pytest.approx(29.97) and q["activity_span"] == 1.7
+        assert r.json()["data"]["metrics"]["pace"]["pace_str"] == "6:25"
+        line = [l for l in caplog.messages if "evt=pose.analyze" in l and "result=ok" in l][0]
+        for frag in ("fps_eff=29.97", "span=1.7", "pace=y", "crop=y"):
+            assert frag in line, f"日志缺 {frag}: {line}"
+
+    def test_v2_skeleton_frame_is_cropped(self, client, monkeypatch):
+        """AC-10:落盘骨架帧为裁剪版——crop=(0.25,0.25,0.75,0.75) → 尺寸=原帧 1/4×1/4。"""
+        _patch_ok(monkeypatch)
+        from PIL import Image
+        import io as _io
+        r = self._up(client, _synth_avi(size=48))
+        assert r.status_code == 200, r.text
+        fid = r.json()["data"]["frame_ids"][0]
+        img = Image.open(_io.BytesIO(client.get(f"/api/v1/chat/images/{fid}").content))
+        assert img.size == (24, 24), f"落盘应为裁剪版,实得 {img.size}"
+
     def test_bad_magic_400(self, client):
         r = self._up(client, b"not-a-video" * 8)
         assert r.status_code == 400 and "不支持" in r.json()["detail"]
@@ -99,9 +129,10 @@ class TestPoseEndpoint:
         finally:
             settings.VIDEO_MAX_MB = old
 
-    @pytest.mark.parametrize("reason", ["low_conf", "no_cycles", "body_too_small"])
+    @pytest.mark.parametrize("reason", ["low_conf", "no_cycles", "body_too_small",
+                                        "no_activity"])
     def test_quality_reject_400_with_hint(self, client, monkeypatch, reason, caplog):
-        """AC-2:三类质量拒析 400 + 拍摄指引文案 + fail 日志(AC-6)"""
+        """AC-2+FR-9:质量拒析(含 v2 no_activity)400 + 拍摄指引文案 + fail 日志(AC-6)"""
         import core.pose as cp
 
         def boom(data, **kw):

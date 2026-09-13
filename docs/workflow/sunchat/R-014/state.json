@@ -1,0 +1,111 @@
+{
+  "req_id": "R-014",
+  "req_type": "feature",
+  "base_requirements": [],
+  "project": "sunchat",
+  "phase": "architecture",
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-13T10:12:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示确认;合规前置 gate:requirements FAIL=0"
+    }
+  ],
+  "clarifications": [
+    {
+      "id": 1,
+      "question": "移动UI形态",
+      "resolution": "question 明示推荐项(D-详见决策记录)",
+      "status": "closed"
+    },
+    {
+      "id": 2,
+      "question": "语音录制与HTTP安全上下文",
+      "resolution": "question 明示推荐项(D-详见决策记录)",
+      "status": "closed"
+    },
+    {
+      "id": 3,
+      "question": "二维码入口位置",
+      "resolution": "question 明示推荐项(D-详见决策记录)",
+      "status": "closed"
+    },
+    {
+      "id": 4,
+      "question": "会话跨端共享策略",
+      "resolution": "question 明示推荐项(D-详见决策记录)",
+      "status": "closed"
+    },
+    {
+      "id": 5,
+      "question": "访问端点形态",
+      "resolution": "question 明示推荐项(D-详见决策记录)",
+      "status": "closed"
+    }
+  ],
+  "modules": [],
+  "steps": [],
+  "analyses": [
+    {
+      "id": "A-1",
+      "topic": "局域网移动接入现状取证",
+      "conclusion": "见 analysis.md(6条证据)",
+      "evidence_count": 6,
+      "status": "confirmed"
+    }
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "手机浏览器兼容性问题(Safari/微信内置浏览器)",
+      "prob": "高",
+      "impact": "低",
+      "mitigation": "响应式+实机E2E验收;SSE用fetch流式回退轮询预案",
+      "status": "open"
+    },
+    {
+      "id": "R-2",
+      "desc": "getUserMedia(录音/摄像头)在非localhost的HTTP下被浏览器禁用",
+      "prob": "高",
+      "impact": "中",
+      "mitigation": "澄清C2:自签TLS证书 或 录音降级为文件上传",
+      "status": "open"
+    },
+    {
+      "id": "R-3",
+      "desc": "局域网内无鉴权端点暴露(现有API本就如此)",
+      "prob": "中",
+      "impact": "中",
+      "mitigation": "声明边界=可信家内网(与现状一致);扫码配对不引入账户体系;不做穿透",
+      "status": "open"
+    },
+    {
+      "id": "R-4",
+      "desc": "手机上传大视频触发抽帧链路超时/内存",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "复用 VIDEO_MAX_MB=50 现限+run_in_threadpool(R-010既有);前端压缩提示",
+      "status": "open"
+    },
+    {
+      "id": "R-5",
+      "desc": "后端挂载dist影响桌面开发流(vite dev)",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "dist缺失时仅返回挂载跳过,dev流零变化",
+      "status": "open"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "33f20533",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-13T10:12:00+08:00"
+}

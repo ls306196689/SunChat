@@ -1,0 +1,6 @@
+data: {"type": "meta", "memory_context": [], "sources": []}
+
+data: {"type": "delta", "content": "你好"}
+
+data: {"type": "done", "content": "", "done": true}
+

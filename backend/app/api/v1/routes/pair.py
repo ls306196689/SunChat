@@ -4,12 +4,25 @@ SunChat Backend - Mobile Pair Route (R-014)
 """
 import socket
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.config import settings
 from utils.logger import logger, log_event
 
 router = APIRouter()
+
+
+def _host_port(request: Request) -> int:
+    """从请求 Host 头提取实际端口(R-014 RUN 缺陷修复:uvicorn --port 与配置脱节)。"""
+    try:
+        host = request.headers.get("host") or ""
+        if ":" in host.rsplit("]", 1)[-1]:
+            p = int(host.rsplit(":", 1)[1])
+            if 1 <= p <= 65535:
+                return p
+    except (ValueError, IndexError):
+        pass
+    return 0
 
 
 def detect_lan_ip() -> str:
@@ -25,11 +38,12 @@ def detect_lan_ip() -> str:
 
 
 @router.get("/pair/info")
-def pair_info():
+def pair_info(request: Request):
     """R-014: 返回局域网移动端地址(二维码源)。无鉴权(可信内网边界,单用户模式)。"""
     try:
         ip = detect_lan_ip()
-        port = settings.PUBLIC_PORT or settings.APP_PORT
+        # 实际服务端口优先级:PUBLIC_PORT > 请求 Host 端口(uvicorn--port 实参) > APP_PORT
+        port = settings.PUBLIC_PORT or _host_port(request) or settings.APP_PORT
         url = f"http://{ip}:{port}/m" if ip else ""
         log_event(logger, "pair", "info", "ok" if ip else "fail",
                   **( {"lan_ip": ip} if ip else {"reason": "no_lan"}))

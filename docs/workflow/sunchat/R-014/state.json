@@ -81,6 +81,13 @@
       "id": 2,
       "title": "前端MobileView+QR+同源base",
       "module": "frontend",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 3,
+      "title": "实机RUN全通道",
+      "module": "integration",
       "status": "in_progress",
       "verified": false
     }
@@ -146,5 +153,5 @@
     "last_pushed_commit": "33f20533",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T10:45:00+08:00"
+  "updated_at": "2026-09-13T11:10:00+08:00"
 }

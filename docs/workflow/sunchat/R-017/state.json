@@ -3,7 +3,7 @@
   "req_id": "R-017",
   "req_type": "feature",
   "title": "跑步姿态分析",
-  "phase": "architecture",
+  "phase": "modules",
   "requirements_version": 1,
   "change_count": 0,
   "base_requirements": [
@@ -56,27 +56,45 @@
   "risks": [
     {
       "id": "R-1",
-      "desc": "MediaPipe 与 numpy/opencv 版本冲突(requirements.lock 既有栈)",
+      "desc": "mediapipe与numpy1.26/opencv栈冲突",
       "level": "med",
-      "status": "open"
+      "status": "closed",
+      "note": "锁mediapipe==0.10.35,venv冒烟共存实测2026-09-13[RUN]"
     },
     {
       "id": "R-2",
-      "desc": "单视频分析 CPU 10~30s 阻塞;run_in_threadpool+单用户场景可接受,多路并发需队列(暂非目标)",
+      "desc": "长视频CPU阻塞",
       "level": "low",
-      "status": "open"
+      "status": "open",
+      "note": "POSE_MAX_SAMPLE_FRAMES=400限帧"
     },
     {
       "id": "R-3",
-      "desc": "拍摄不规范(正面/抖动机位)导致关键点置信度低→指标失真;需置信度门槛+拒析文案",
+      "desc": "拍摄不规范指标失真",
       "level": "med",
-      "status": "open"
+      "status": "open",
+      "note": "FR-3三重门槛+数据质量分"
     },
     {
       "id": "R-4",
-      "desc": "无 VL 模型时报告端降级路径未定,体验分叉",
+      "desc": "无VL体验分叉",
       "level": "low",
-      "status": "open"
+      "status": "closed",
+      "note": "D-002降级模板+AC-4"
+    },
+    {
+      "id": "R-5",
+      "desc": "SQLite消息表加列迁移",
+      "level": "low",
+      "status": "open",
+      "note": "幂等ALTER+失败降级extra=None"
+    },
+    {
+      "id": "R-6",
+      "desc": "landmarker每请求初始化慢",
+      "level": "low",
+      "status": "open",
+      "note": "进程级单例+锁"
     }
   ],
   "repo": {
@@ -86,5 +104,5 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T16:26:18+08:00"
+  "updated_at": "2026-09-13T16:28:22+08:00"
 }

@@ -1,6 +1,6 @@
 # R-016 手机上传失败诊断通道 + multipart CT 隐患 + 缓存毒化治理
 
-需求: R-016 | 类型: bugfix(标准) | 状态: 待冻结 | 日期: 2026-09-13
+需求: R-016 | 类型: bugfix(标准) | 状态: 已确认(澄清齐,待冻结门禁) | 日期: 2026-09-13
 关联: 修改 R-014(mobile-pair 收发链路观测面)/R-013(evt= 体系);取证 `analysis.md#A-1~A-4`
 
 ## 背景
@@ -57,5 +57,8 @@ mobile.send/upload 阶段事件;**降噪**:环形缓冲+批量 flush(≤50/批,�
 5s 兜底一次),fail 带 exc=False(错误已在 extra,堆栈不适用客户端);堆栈:
 diag 内部异常记 ERROR exc_info。
 
-## 待澄清清单
-(见 state.clarifications,question 单包处理)
+## 澄清决议
+- C1 诊断通道默认开启(阶段事件+错误自动汇入;错误即传+5s 兜底 flush)
+- C2 上传悬挂阈值 20s(显式超时文案含状态/耗时/reqId)
+- C3 记录文件元数据(名/大小/类型/reqId,不含内容;可信内网边界同 pair)
+

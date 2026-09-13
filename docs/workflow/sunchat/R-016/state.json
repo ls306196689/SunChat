@@ -1,31 +1,132 @@
 {
   "req_id": "R-016",
   "req_type": "bugfix",
-  "base_requirements": ["R-014", "R-013", "R-015"],
-  "project": "sunchat",
-  "phase": "clarify",
-  "gates": [],
-  "clarifications": [
-    {"id": 1, "question": "诊断日志默认开启还是手动开关?", "resolution": "", "status": "open"},
-    {"id": 2, "question": "上传悬挂超时阈值?", "resolution": "", "status": "open"},
-    {"id": 3, "question": "diag 事件是否记录文件元数据(名/大小/类型,不含内容)?", "resolution": "", "status": "open"}
+  "base_requirements": [
+    "R-014",
+    "R-013",
+    "R-015"
   ],
-  "modules": [],
+  "project": "sunchat",
+  "phase": "plan",
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-13T13:30:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认冻结\"(5FR/6AC全文呈现);gate:requirements FAIL=0"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-13T13:35:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认架构\",风险表4项评审通过"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-13T13:35:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认设计\",design-change.md全要点(diag端点/托管头/mobileDiag/埋点/阈值)"
+    }
+  ],
+  "clarifications": [
+    {
+      "id": 1,
+      "question": "诊断日志默认开启还是手动开关?",
+      "resolution": "question明示:默认开启(阶段事件+错误自动汇入)",
+      "status": "closed"
+    },
+    {
+      "id": 2,
+      "question": "上传悬挂超时阈值?",
+      "resolution": "question明示:20s,超时显式报错",
+      "status": "closed"
+    },
+    {
+      "id": 3,
+      "question": "diag 事件是否记录文件元数据(名/大小/类型,不含内容)?",
+      "resolution": "question明示:记录元数据(名/大小/类型/reqId,不含内容)",
+      "status": "closed"
+    }
+  ],
+  "modules": [
+    {
+      "name": "mobile-diagnostics",
+      "design_doc": "design-change.md",
+      "design_done": true
+    },
+    {
+      "name": "mobile-pair",
+      "design_doc": "(基线)design/modules/mobile-pair.md 归档回写",
+      "design_done": true
+    }
+  ],
   "steps": [],
   "analyses": [
-    {"id": "A-1", "topic": "失败形态=请求未达服务器(排除后端)", "conclusion": "C-1 客户端发出阶段丢失,根因判定需客户端一手证据", "evidence_count": 4, "status": "confirmed"},
-    {"id": "A-2", "topic": "旧bundle复活+SPA回退投毒HTML实证", "conclusion": "C-2 缓存治理必做(index.html no-cache+assets不存在404)", "evidence_count": 3, "status": "confirmed"},
-    {"id": "A-3", "topic": "显式multipart CT:axios1.x自动补boundary,定性隐患规范化非根因", "conclusion": "C-3 删除显式CT,零风险", "evidence_count": 2, "status": "confirmed"},
-    {"id": "A-4", "topic": "drop_console观测盲区+用户要求日志上报", "conclusion": "C-4 建诊断通道", "evidence_count": 3, "status": "confirmed"}
+    {
+      "id": "A-1",
+      "topic": "失败形态=请求未达服务器(排除后端)",
+      "conclusion": "C-1 客户端发出阶段丢失,根因判定需客户端一手证据",
+      "evidence_count": 4,
+      "status": "confirmed"
+    },
+    {
+      "id": "A-2",
+      "topic": "旧bundle复活+SPA回退投毒HTML实证",
+      "conclusion": "C-2 缓存治理必做(index.html no-cache+assets不存在404)",
+      "evidence_count": 3,
+      "status": "confirmed"
+    },
+    {
+      "id": "A-3",
+      "topic": "显式multipart CT:axios1.x自动补boundary,定性隐患规范化非根因",
+      "conclusion": "C-3 删除显式CT,零风险",
+      "evidence_count": 2,
+      "status": "confirmed"
+    },
+    {
+      "id": "A-4",
+      "topic": "drop_console观测盲区+用户要求日志上报",
+      "conclusion": "C-4 建诊断通道",
+      "evidence_count": 3,
+      "status": "confirmed"
+    }
   ],
-  "requirements_version": 0,
+  "requirements_version": 1,
   "change_count": 0,
   "escalated_from_micro": false,
   "risks": [
-    {"id": "R-1", "desc": "diag通道被滥用刷日志(无鉴权)", "prob": "低", "impact": "低", "mitigation": "批≤50事件+截断+仅evt行;内网边界与pair一致;如需再限额", "status": "open"},
-    {"id": "R-2", "desc": "flush风暴(错误循环)", "prob": "低", "impact": "中", "mitigation": "前端flush节流(≥2s)+错误去重计数合并", "status": "open"},
-    {"id": "R-3", "desc": "assets 404化后,老缓存手机资源加载失败暴露更明显", "prob": "中", "impact": "低", "mitigation": "属正确行为(旧引用本就应失效);404+no-cache迫使刷新换新,配AC-3真机验证", "status": "open"},
-    {"id": "R-4", "desc": "隐私:文件名/尺寸入日志", "prob": "低", "impact": "低", "mitigation": "仅元数据不含内容;可信内网边界(澄清C3确认)", "status": "open"}
+    {
+      "id": "R-1",
+      "desc": "diag通道被滥用刷日志(无鉴权)",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "批≤50事件+截断+仅evt行;内网边界与pair一致;如需再限额",
+      "status": "open"
+    },
+    {
+      "id": "R-2",
+      "desc": "flush风暴(错误循环)",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "前端flush节流(≥2s)+错误去重计数合并",
+      "status": "open"
+    },
+    {
+      "id": "R-3",
+      "desc": "assets 404化后,老缓存手机资源加载失败暴露更明显",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "属正确行为(旧引用本就应失效);404+no-cache迫使刷新换新,配AC-3真机验证",
+      "status": "open"
+    },
+    {
+      "id": "R-4",
+      "desc": "隐私:文件名/尺寸入日志",
+      "prob": "低",
+      "impact": "低",
+      "mitigation": "仅元数据不含内容;可信内网边界(澄清C3确认)",
+      "status": "open"
+    }
   ],
   "repo": {
     "created": true,
@@ -34,5 +135,5 @@
     "last_pushed_commit": "724ab0a2",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T13:20:00+08:00"
+  "updated_at": "2026-09-13T13:35:00+08:00"
 }

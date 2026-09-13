@@ -33,6 +33,35 @@ def _fmt(v, unit=""):
     return f"{v}{unit}" if v is not None else "未测得(样本周期不足或该相位质量低)"
 
 
+def _pace_line(metrics: dict):
+    p = metrics.get("pace")
+    if p:
+        return (f"配速(估计): {p['pace_str']}/km ≈ {p['kmh']} km/h"
+                f"(步长 {p['stride_m']}m,按身高 {p['height_cm']}cm 自标定,±20%级)")
+    r = metrics.get("pace_reason")
+    return f"配速: 未输出({r})" if r else None
+
+
+def transparency_lines(result) -> list:
+    """R-017v2 FR-8/9/10/12:透明度行——真实帧率/分析段/慢动作还原/配速口径。"""
+    q, m = result.quality, result.metrics
+    lines = []
+    if q.get("fps_eff"):
+        lines.append(f"分析帧率≈{q['fps_eff']}fps(PTS 实测)")
+    if q.get("activity_span"):
+        lines.append(f"跑动分析段 {q['activity_span']}s(站立/走位段已剔除)")
+    if q.get("slo_factor", 1) > 1:
+        lines.append(f"源为慢动作×{q['slo_factor']},步频已按倍速还原")
+    if q.get("vfr"):
+        lines.append("⚠容器为可变帧率,时间轴置信度降级")
+    if result.crop_bbox:
+        lines.append("骨架帧为关键区域裁剪版")
+    pl = _pace_line(m)
+    if pl:
+        lines.append(pl)
+    return lines
+
+
 def summary_text(metrics: dict) -> str:
     lines = [
         f"步频 cadence_spm: {_fmt(metrics.get('cadence_spm'), ' 步/分')}",
@@ -43,6 +72,12 @@ def summary_text(metrics: dict) -> str:
         f"骨盆侧倾 pelvic_tilt_deg: {_fmt(metrics.get('pelvic_tilt_deg'), '°')}",
         f"左右触地不对称度 asymmetry_pct: {_fmt(metrics.get('asymmetry_pct'), ' %')}",
     ]
+    p = metrics.get("pace")
+    if p:
+        lines.append(f"估计配速 pace: {p['pace_str']}/km({p['kmh']} km/h,"
+                     f"步长 {p['stride_m']}m,身高基准 {p['height_cm']}cm)")
+    elif metrics.get("pace_reason"):
+        lines.append(f"估计配速 pace: 未输出({metrics['pace_reason']})")
     return "\n".join(lines)
 
 
@@ -53,6 +88,9 @@ def template_report(result) -> str:
     parts.append("💡 规则建议" + ("" if hints else "(各项指标在常见范围内)"))
     parts += [f"- {h}" for h in hints] or ["- 暂无突出风险项"]
     parts.append("\n(未启用视觉模型解读,以上为指标+规则报告;部署 VL 模型可获得教练式点评,详见 R-017)")
+    tl = transparency_lines(result)
+    if tl:
+        parts.append("\nℹ️ " + "；".join(tl))
     parts.append("\n※ 数据基于单目视频估计,仅供参考,非医疗建议。")
     return "\n".join(parts)
 
@@ -71,9 +109,10 @@ def build_report(result, frame_b64s: List[str], *, llm=None, model: Optional[str
             from core.model_manager import model_manager
             vision_ok = model_manager.supports_vision(model)
         if vision_ok and frame_b64s:
+            tl = transparency_lines(result)
+            ctx = summary_text(result.metrics) + ("\n(口径:" + "；".join(tl) + ")" if tl else "")
             msg = {"role": "user",
-                   "content": "本次跑姿指标如下,请结合骨架帧出教练报告:\n" +
-                              summary_text(result.metrics),
+                   "content": "本次跑姿指标如下,请结合骨架帧出教练报告:\n" + ctx,
                    "images": list(frame_b64s)}
             from app.config import settings
             resp = llm.chat([{"role": "system", "content": SYSTEM}, msg],

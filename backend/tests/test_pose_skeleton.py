@@ -67,3 +67,26 @@ class TestDrawSkeleton:
         snap = base.copy()
         draw_skeleton(base, _mk_lm(0.1))
         assert np.array_equal(base, snap), "draw 不得改原帧"
+
+    def test_crop_bbox_smaller_output_and_redraw(self):
+        """R-017v2 FR-12:crop_bbox(归一化xyxy)→ 输出=裁剪区尺寸,骨架仍绘出。"""
+        base = np.zeros((480, 640, 3), dtype=np.uint8)
+        out = draw_skeleton(base, _mk_lm(0.3), crop_bbox=(0.25, 0.0, 0.75, 0.5))
+        assert out.shape == (240, 320, 3)
+        assert out.sum() > 0, "裁剪图上骨架线应有非零像素"
+
+    def test_crop_landmarks_remapped_into_view(self):
+        """关键点落在裁剪区 → 必有像素级绘制(锚点重映射正确,不会整体出画)。"""
+        base = np.zeros((480, 640, 3), dtype=np.uint8)
+        lm = _mk_lm(0.3)
+        whole = draw_skeleton(base, lm)
+        c = (0.0, 0.5, 1.0, 1.0)  # 下半屏(踝所在)
+        cropped = draw_skeleton(base, lm, crop_bbox=c)
+        assert cropped.shape == (240, 640, 3)
+        assert cropped.sum() > 0
+
+    def test_crop_degenerate_clamped(self):
+        """越界/退化 bbox 钳制,不抛异常。"""
+        base = np.zeros((120, 160, 3), dtype=np.uint8)
+        out = draw_skeleton(base, _mk_lm(0.3), crop_bbox=(-0.2, -0.1, 1.3, 0.02))
+        assert out.ndim == 3 and out.shape[2] == 3 and out.shape[0] >= 1

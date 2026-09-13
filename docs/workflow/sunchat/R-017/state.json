@@ -53,16 +53,15 @@
     },
     {
       "id": "3",
-      "status": "in_progress",
+      "status": "done",
       "title": "pose-core实现+单测(v2重做)",
-      "verified": false
+      "verified": true
     },
     {
       "id": "4",
-      "status": "done",
-      "title": "pose-skeleton实现+单测",
-      "in_progress": true,
-      "verified": true
+      "status": "in_progress",
+      "title": "pose-skeleton实现+单测(v2小改:crop_bbox)",
+      "verified": false
     },
     {
       "id": "5",

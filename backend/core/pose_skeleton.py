@@ -2,7 +2,7 @@
 SunChat Backend - Pose Skeleton P2 pose-skeleton (R-017)
 相位选帧 + 骨架叠加(触地侧红/摆动侧绿)。纯函数,无 IO。
 """
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -49,11 +49,26 @@ def select_key_frames(result: PoseResult, k: int = 4) -> List[Tuple[int, str]]:
     return picked[:k]
 
 
-def draw_skeleton(rgb_frame: np.ndarray, landmarks: list) -> np.ndarray:
-    """33 点骨架叠加。返回新帧(uint8 RGB)。"""
+def draw_skeleton(rgb_frame: np.ndarray, landmarks: list,
+                  crop_bbox: Optional[Tuple[float, float, float, float]] = None) -> np.ndarray:
+    """33 点骨架叠加。返回新帧(uint8 RGB)。
+
+    crop_bbox=归一化(xyxy,R-017v2 FR-12)时先裁剪再绘制(躯干占比≥60% 交 VLM);
+    None=旧行为整帧绘制。关键点归一化坐标在裁剪系内重映射。
+    """
     from PIL import Image, ImageDraw
-    h, w = rgb_frame.shape[:2]
-    img = Image.fromarray(np.asarray(rgb_frame, dtype=np.uint8))
+    arr = np.asarray(rgb_frame, dtype=np.uint8)
+    h, w = arr.shape[:2]
+    if crop_bbox is not None:
+        x0, y0, x1, y1 = crop_bbox
+        px0, py0, px1, py1 = int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)
+        px0, py0 = max(0, min(px0, w - 1)), max(0, min(py0, h - 1))
+        px1, py1 = max(px0 + 1, min(px1, w)), max(py0 + 1, min(py1, h))
+        arr = arr[py0:py1, px0:px1]
+        h, w = arr.shape[:2]
+        landmarks = [((p[0] - x0) / max(x1 - x0, 1e-6),
+                      (p[1] - y0) / max(y1 - y0, 1e-6), p[2], p[3]) for p in landmarks]
+    img = Image.fromarray(arr.copy())
     d = ImageDraw.Draw(img)
     pts = [(p[0] * w, p[1] * h) for p in landmarks]
 

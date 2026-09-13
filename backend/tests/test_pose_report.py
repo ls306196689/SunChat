@@ -77,3 +77,42 @@ class TestTemplate:
     def test_summary_text_lists_7_keys(self):
         s = summary_text(_mk().metrics)
         assert len(s.splitlines()) == 7
+
+
+class TestTransparencyV2:
+    """R-017v2 FR-8/9/12 透明度行 + pace 三态文案。"""
+
+    def _mk_q(self, quality=None, pace=None, reason=None):
+        from core.pose import PoseResult
+        m = {"cadence_spm": 170.0, "stance_swing_ratio": 0.8,
+             "knee_angle_at_contact_deg": 158.0, "knee_angle_at_toeoff_deg": 61.0,
+             "hip_rom_deg": 52.0, "pelvic_tilt_deg": 3.2, "asymmetry_pct": 4.1,
+             "pace": pace, "pace_reason": reason}
+        return PoseResult(metrics=m, quality=quality or {}, cycles=[],
+                          landmarks_seq=[], sample_ts=[], video_duration=3.2)
+
+    def test_transparency_lines_rendered_in_template(self):
+        from core.pose_report import template_report, transparency_lines
+        r = self._mk_q(quality={"fps_eff": 29.97, "fps_nominal": 240.0, "slo_factor": 8,
+                                "vfr": True, "activity_span": 3.4},
+                      pace={"v_ms": 2.6, "kmh": 9.4, "min_per_km": 6.41,
+                            "pace_str": "6:25", "stride_m": 0.91, "height_cm": 175.0})
+        tl = transparency_lines(r)
+        joined = "\n".join(tl)
+        assert "29.97fps" in joined and "慢动作×8" in joined and "3.4s" in joined
+        assert "可变帧率" in joined and "6:25/km" in joined and "175.0cm" in joined
+        t = template_report(r)
+        assert "分析帧率≈29.97fps" in t
+
+    def test_pace_reason_line_when_null(self):
+        from core.pose_report import template_report
+        r = self._mk_q(reason="身高未配置(POSE_USER_HEIGHT_CM=0),不输出配速")
+        t = template_report(r)
+        assert "配速: 未输出" in t and "身高未配置" in t
+
+    def test_vl_prompt_carries_context(self):
+        llm = FakeLLM(text="ok")
+        r = self._mk_q(quality={"fps_eff": 25.0, "activity_span": 2.2})
+        build_report(r, ["b64"], llm=llm, vision_ok=True)
+        content = llm.calls[0][0][1]["content"]
+        assert "跑动分析段 2.2s" in content

@@ -5,7 +5,7 @@
     "R-014"
   ],
   "project": "sunchat",
-  "phase": "micro_execute",
+  "phase": "done",
   "gates": [
     {
       "gate": "change_confirmed",
@@ -18,6 +18,12 @@
       "at": "2026-09-13T12:12:00+08:00",
       "confirmed_by": "user",
       "note": "同一question承载:方案设计节(App.vue裸渲染分支+提示行+回归设计)全文已呈现并获确认"
+    },
+    {
+      "gate": "archived",
+      "at": "2026-09-13T12:35:00+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"验证通过,归档 R-015\"(实机AC-4);archive门禁FAIL=0"
     }
   ],
   "clarifications": [],
@@ -34,8 +40,8 @@
       "id": 2,
       "title": "实机 AC-4 确认 + 基线回写",
       "module": "design/modules/mobile-pair.md, baseline.md",
-      "status": "pending",
-      "verified": false
+      "status": "done",
+      "verified": true
     }
   ],
   "analyses": [
@@ -44,21 +50,21 @@
       "topic": "/m 被桌面壳包裹根因(App.vue 无路由分支+高度溢出)",
       "conclusion": "C-1 实现遗漏,修复须落 App.vue 壳层裸渲染;详见 analysis.md",
       "evidence_count": 8,
-      "status": "open"
+      "status": "confirmed"
     },
     {
       "id": "A-2",
       "topic": "R-014 验收未拦截原因(RUN 证据止于 HTTP 层)",
       "conclusion": "C-2 渲染层无证据;本需求补 AC-4 实机渲染确认",
       "evidence_count": 2,
-      "status": "open"
+      "status": "confirmed"
     },
     {
       "id": "A-3",
       "topic": "vite dev 5173 手机不可达与 QR 端口提示",
       "conclusion": "C-3 QR 固定 8000 正确,补开发态文案提示,不改 host 绑定",
       "evidence_count": 3,
-      "status": "open"
+      "status": "confirmed"
     }
   ],
   "requirements_version": 1,
@@ -71,7 +77,7 @@
       "prob": "低",
       "impact": "中",
       "mitigation": "分支条件仅 route.path==='/m';桌面路由渲染路径零改动;build+目测回归",
-      "status": "open"
+      "status": "closed"
     },
     {
       "id": "R-2",
@@ -79,7 +85,7 @@
       "prob": "低",
       "impact": "中",
       "mitigation": "analysis 假设区登记;实机 AC-4 覆盖即排除;若白屏另立需求(browserslist)",
-      "status": "open"
+      "status": "closed"
     }
   ],
   "repo": {
@@ -89,5 +95,5 @@
     "last_pushed_commit": "f64915b7",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T12:20:00+08:00"
+  "updated_at": "2026-09-13T12:35:00+08:00"
 }

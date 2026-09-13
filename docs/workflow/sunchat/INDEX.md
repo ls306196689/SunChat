@@ -27,4 +27,4 @@
 | R-012 | 多模态响应字段路径修复(axios拦截器双解包致image_id恒undefined) | bugfix | done | - | 2026-09-11 |
 | R-013 | 日志体系完善(请求关联trace+环节事件evt+高频降噪聚合) | iteration | done | observability(新增) | 2026-09-11~12 |
 | R-014 | 局域网手机扫码接入(配对二维码+移动端会话页+相册图/视频/语音收发) | feature | done | mobile-pair(新增) | 2026-09-13 |
-| R-015 | 手机扫码端缺陷修复(/m 裸渲染脱离桌面壳+dev 端口提示) | bugfix | active | - | 2026-09-13 |
+| R-015 | 手机扫码端缺陷修复(/m 裸渲染脱离桌面壳+dev 端口提示) | bugfix | done | mobile-pair 修订 | 2026-09-13 |

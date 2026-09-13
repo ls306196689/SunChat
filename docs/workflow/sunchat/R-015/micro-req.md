@@ -81,3 +81,19 @@
 ## 越界自检(执行中每轮核对)
 - [ ] 仍 ≤3 文件? [ ] 未改对外接口? [ ] 无新架构决策? [ ] 修复失败 <2 次?
 > 任一失守 → 立即停止,escalated,state.escalated_from_micro=true,phase→expand。
+
+## 验收对照(micro 简化,归档时填)
+| AC | 结果 | 证据 |
+|---|---|---|
+| AC-1 | ✅ | `node frontend/scripts/r015_check.mjs` PASS=5 FAIL=0(重 build 后复跑;dist 含 bare 编译签名 `"/m"===`,负对照:旧产物上该签名缺失) |
+| AC-2 | ✅ | `npm run build` 通过,新产物 index-Bu_i6R7d.js 已挂载生效(服务返回同哈希) |
+| AC-3 | ✅ | `pytest tests/ -q` → 274 passed + 1 skipped(收集 275 与 R-014 基线一致,后端零改动) |
+| AC-4 | ✅ | 用户实机确认"验证通过,归档 R-015"(question,2026-09-13;渲染层证据补 R-014 A-2 盲区) |
+
+全量单测摘要:pytest 274+1skip/275;r015_check 5/5;r014_check 8/8;vite build 绿。
+风险终态:R-1(壳误伤桌面)→ closed(build+实机桌面路由正常);R-2(老内核白屏假设)→ closed(实机打开无白屏,假设排除)。
+
+## 自我复盘清单
+- OPT-011(proposed→promoted):移动/UI 验收 RUN 须含渲染层证据;本需求 A-2 教训。
+- OPT-012(proposed→promoted):产物静态断言三原则(首跑 5/5 实为旧产物假绿+正则嵌斜杠 SyntaxError,同类三见)。
+- 两条已晋升落地:plan-execute-phase.md 两条 MUST + registry T-RENDER-EVIDENCE/T-DIST-ASSERT-SIGNATURE(skill 仓 commit 见 R-015 归档引用,HiEarth 2c5ccbe+晋升 commit)。

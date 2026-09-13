@@ -8,6 +8,8 @@
 - SPA 静态端点:dist 存在时 `GET /`、`GET /m`、`GET /assets/*`;未知非 api 路径回退
   index.html(history 路由);api 路径不劫持。
 - `frontend/src/pages/MobileView.vue`(路由 `/m`):
+  - **壳适配(R-015)**:`App.vue` `bare = route.path === '/m'` 时裸渲染 `<router-view/>`
+    (无 Sidebar/HeaderBar/app-footer,`100dvh` 全屏);桌面路由走原壳零改动;
   - 会话:GET/POST /chat/sessions(共享列表)、GET /chat/sessions/{id}/messages(分页 20);
   - 发送:SSE POST /chat/stream(session_id/content/images,fetch ReadableStream 解析 `data:` 帧);
   - 附件:uploadChatImage(≤4/条)、uploadVideoFrames 复用 request.js 封装

@@ -28,6 +28,10 @@
   `/assets/*` 不存在 → JSON 404,**不再回退投毒 HTML**(A-2)。
 - FR-4 multipart 规范化:request.js 三处上传删除显式 `Content-Type`
   (A-3,浏览器自动带 boundary,排除老内核差异面)。
+- FR-6 版本单一来源与上报(R-016 变更 v1.1,用户指令"修改之后调整版本号,上传信息带上版本"):
+  package.json version(1.0.0→1.1.0)经 vite define(__APP_VERSION__)+transformIndexHtml
+  (%APP_VERSION%)注入;canary/mobileDiag 全部事件 extra.ver 携带;App.vue/Sidebar 硬编码
+  v1.0.0 同步单一来源。
 - FR-5 上传可悬挂感知:"上传中"超 20s 前端主动判超时(显式 timeout=20s upload)+
   失败文案具体化(HTTP 状态/耗时/reqId)。
 

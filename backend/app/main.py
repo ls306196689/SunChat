@@ -176,6 +176,11 @@ def spa_static(full_path: str):
     except ValueError:
         raise HTTPException(status_code=404, detail="Not Found")
     if candidate.is_file():
+        if full_path.startswith("assets/"):
+            # R-016/D-3: crossorigin 模块脚本需 ACAO 才能向 Safari 披露错误详情
+            # (同 http+IP 环境缺此头时 WebKit 报 "Script error.@0:0" 遮蔽真因)
+            return FileResponse(candidate,
+                                headers={"Access-Control-Allow-Origin": "*"})
         if full_path == "index.html":
             return FileResponse(candidate, headers=_HTML_HEADERS)
         return FileResponse(candidate)

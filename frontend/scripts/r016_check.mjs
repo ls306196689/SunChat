@@ -38,6 +38,8 @@ t('test_inline_canary',
   idx.includes('page.canary') && idx.includes('js.hung') && idx.includes('unhandledrejection') &&
   idx.includes('sendBeacon'))
 t('test_diag_beacon_path', dg.includes('sendBeacon'))
+t('test_version_single_source',
+  dg.includes('__APP_VERSION__') && idx.includes("ver: '%APP_VERSION%'"))
 
 t('test_r014_invariants', mv.includes('useChatStore') && mv.includes('getUserMedia'))
 
@@ -51,6 +53,10 @@ if (existsSync(distDir)) {
   t('test_dist_signatures',
     js.includes('/diag/client') && js.includes('upload.pick'),
     'dist 应含 diag/client 与 upload.pick 埋点串(先 npm run build)')
+  const distIdx = read('../dist/index.html')
+  t('test_dist_version_injected',
+    distIdx.includes("ver: '1.1.0'") && !distIdx.includes('%APP_VERSION%'),
+    'dist index.html 应已注入版本1.1.0(版本占位符零残留)')
 } else {
   t('test_dist_signatures', false, 'dist 未构建')
 }

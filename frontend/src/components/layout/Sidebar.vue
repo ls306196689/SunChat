@@ -32,6 +32,7 @@ const menuItems = ref([
 ])
 
 const collapsed = ref(false)
+const appVer = __APP_VERSION__  // R-016/FR-6: package.json 单一来源
 const currentKey = computed(() => {
   const map = {
     '/': 'chat',
@@ -117,7 +118,7 @@ defineExpose({
         {{ collapsed ? '展开' : '收起' }}
       </n-button>
       <div class="version-info">
-        v1.0.0
+        v{{ appVer }}
       </div>
     </div>
   </n-layout-sider>

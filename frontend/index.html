@@ -16,6 +16,7 @@
               ts: Date.now(), lvl: step === 'js.error' ? 'err' : 'info',
               step: step, msg: String(msg || step).slice(0, 400),
               extra: Object.assign({
+                ver: '%APP_VERSION%',
                 ua: navigator.userAgent.slice(0, 140), href: location.href.slice(0, 160),
                 plat: navigator.platform || '', lang: navigator.language || '',
                 scr: screen.width + 'x' + screen.height, dpr: String(window.devicePixelRatio || 1)

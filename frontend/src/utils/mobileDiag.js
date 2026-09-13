@@ -2,6 +2,8 @@
 // drop_console 致生产无现场 → 阶段事件环形缓冲 + 批量回传 /api/v1/diag/client。
 // 原则:diag 自身失败绝不影响业务,也不递归诊断(静默)。
 const API = import.meta.env.VITE_API_URL || '/api/v1'
+// R-016/FR-6: 版本注入(vite define,单一来源 package.json),诊断事件带版本对账构建
+const VER = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
 const BUFFER_MAX = 200
 const BATCH_MAX = 50
 const FLUSH_MIN_MS = 2000
@@ -18,6 +20,7 @@ let initialized = false
 function now() { return Date.now() }
 
 function enqueue(ev) {
+  ev.extra = Object.assign({ ver: VER }, ev.extra || {})  // FR-6: 全事件带版本
   buf.push(ev)
   if (buf.length > BUFFER_MAX) buf.splice(0, buf.length - BUFFER_MAX)
 }

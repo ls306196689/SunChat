@@ -7,6 +7,7 @@ import HeaderBar from '@/components/layout/HeaderBar.vue'
 import { NConfigProvider, NMessageProvider, NLayout, NLayoutContent } from 'naive-ui'
 
 const themeStore = useThemeStore()
+const APP_VER = __APP_VERSION__  // R-016/FR-6: package.json 单一来源
 const route = useRoute()
 const bare = computed(() => route.path === '/m')  // R-015: /m 脱离桌面壳(无侧栏/双头/页脚+溢出)
 
@@ -58,7 +59,7 @@ function toggleDarkMode() {
           
           <div class="app-footer">
             <div class="footer-content">
-              <span>SunChat v1.0.0 - 你的个人 AI 助手</span>
+              <span>SunChat v{{ APP_VER }} - 你的个人 AI 助手</span>
               <span>本地运行中</span>
             </div>
           </div>

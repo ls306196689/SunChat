@@ -116,8 +116,8 @@
       "status": "confirmed"
     }
   ],
-  "requirements_version": 1,
-  "change_count": 0,
+  "requirements_version": 2,
+  "change_count": 1,
   "escalated_from_micro": false,
   "risks": [
     {
@@ -160,5 +160,5 @@
     "last_pushed_commit": "845b9f41",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T14:10:00+08:00"
+  "updated_at": "2026-09-13T14:55:00+08:00"
 }

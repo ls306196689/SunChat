@@ -4,8 +4,8 @@
   "req_type": "feature",
   "title": "跑步姿态分析",
   "phase": "execute",
-  "requirements_version": 1,
-  "change_count": 0,
+  "requirements_version": 2,
+  "change_count": 1,
   "base_requirements": [
     "R-008 chat-image",
     "R-010 chat-video(附录:A-1帧上限/A-4均匀抽帧)",
@@ -30,6 +30,12 @@
       "at": "2026-09-13T16:32:06+08:00",
       "confirmed_by": "user",
       "note": "question整批确认P1~P5接口;design-change+modules入库"
+    },
+    {
+      "gate": "change_confirmed(v2)",
+      "at": "2026-09-13T23:22:56+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认变更,开工\";FR-8~12/AC-7~10;analysis A-1~A-4 RUN证据;配速一并纳入;reset 3/6,小改4/5"
     }
   ],
   "steps": [
@@ -47,9 +53,9 @@
     },
     {
       "id": "3",
-      "status": "done",
-      "title": "pose-core实现+单测",
-      "verified": true
+      "status": "in_progress",
+      "title": "pose-core实现+单测(v2重做)",
+      "verified": false
     },
     {
       "id": "4",
@@ -66,9 +72,9 @@
     },
     {
       "id": "6",
-      "status": "done",
-      "title": "端点+迁移+单测",
-      "verified": true
+      "status": "pending",
+      "title": "端点+迁移+单测(v2重做)",
+      "verified": false
     },
     {
       "id": "7",
@@ -156,6 +162,34 @@
       "level": "low",
       "status": "open",
       "note": "进程级单例+锁"
+    },
+    {
+      "id": "R-7",
+      "desc": "粗扫5fps处于髋2f奈奎斯特临界,可能漏检高速碎步",
+      "level": "med",
+      "status": "open",
+      "note": "实装夹具断言不漏检,漏则升8fps"
+    },
+    {
+      "id": "R-8",
+      "desc": "身高配置错→配速线性失真(腿长=身高×0.53)",
+      "level": "med",
+      "status": "open",
+      "note": "报告打印所用身高;身高未配=不输出配速"
+    },
+    {
+      "id": "R-9",
+      "desc": "机位倾斜/俯拍使水平像素距离失真",
+      "level": "low",
+      "status": "open",
+      "note": "落地点水平差取像素x+报告标'估计';拒绝检测倾斜超阈值则不输出配速"
+    },
+    {
+      "id": "R-10",
+      "desc": "VFR微信转码视频时间轴不匀",
+      "level": "low",
+      "status": "open",
+      "note": "PTS间隔CV>0.35显式标注置信度降级"
     }
   ],
   "repo": {
@@ -165,7 +199,7 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T16:59:06+08:00",
+  "updated_at": "2026-09-13T23:22:56+08:00",
   "modules": [
     {
       "id": "P1",
@@ -191,6 +225,28 @@
       "id": "P5",
       "name": "pose-front",
       "design_done": true
+    }
+  ],
+  "analyses": [
+    {
+      "id": "A-1",
+      "status": "confirmed",
+      "q": "前段无效信息稀释步频(实验复现)"
+    },
+    {
+      "id": "A-2",
+      "status": "confirmed",
+      "q": "帧率元数据不可信/须PTS实测(实验复现)"
+    },
+    {
+      "id": "A-3",
+      "status": "confirmed",
+      "q": "配速单目自标定可行±20%(原型v5:步长误差-4%,端到端19%)"
+    },
+    {
+      "id": "A-4",
+      "status": "confirmed",
+      "q": "粗扫采样率账(⚠5fps临界待实装验证)"
     }
   ]
 }

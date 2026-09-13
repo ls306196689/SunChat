@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useThemeStore } from '@/stores/theme'
 import { NCard, NButton, NSwitch, NSelect, useMessage, NStatistic, NSpace, NInput, NTag, NSpin } from 'naive-ui'
+import QrcodeVue from 'qrcode.vue'  // R-014: 手机配对二维码(既有依赖首个消费方)
 import request from '@/utils/request'
 
 const themeStore = useThemeStore()
@@ -17,6 +18,21 @@ const settings = ref({
 
 // API 地址配置
 const apiUrl = ref('http://localhost:11434')
+
+// R-014: 手机接入(pair/info 拉局域网地址,渲染二维码)
+const pair = ref({ lan_ip: '', port: 8000, url: '', loading: true, err: '' })
+async function loadPair() {
+  pair.value.loading = true; pair.value.err = ''
+  try {
+    const r = await request.get('/pair/info')
+    const d = r?.data ?? r  // R-012 双写防御
+    pair.value = { ...pair.value, ...d, loading: false }
+  } catch (e) {
+    pair.value.err = e?.response?.data?.detail || e?.message || '获取配对信息失败'
+    pair.value.loading = false
+  }
+}
+onMounted(loadPair)
 
 // ===== 模型管理状态 =====
 const modelLoading = ref(false)
@@ -182,6 +198,23 @@ function handleClearCache() {
 
 <template>
   <div class="settings-view">
+    <n-card title="手机接入(局域网)" :bordered="false" class="setting-card">
+      <n-spin :show="pair.loading">
+        <div v-if="pair.url" style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+          <QrcodeVue :value="pair.url" :size="180" level="M" />
+          <div>
+            <p style="margin:0 0 6px;">手机浏览器扫一扫,或手动访问:</p>
+            <code style="font-size:13px; word-break:break-all;">{{ pair.url }}</code>
+            <p style="margin:8px 0 0; font-size:12px; color:#999;">与电脑处于同一 Wi-Fi/局域网;打不开请检查本机防火墙是否放行端口 {{ pair.port }}。</p>
+            <n-button size="small" style="margin-top:8px;" @click="loadPair">刷新地址</n-button>
+          </div>
+        </div>
+        <div v-else style="color:#d03050; font-size:13px;">
+          {{ pair.err || '未探测到局域网 IP(无网络/纯本机场景)。可在手机手动输入电脑局域网地址,如 http://<电脑IP>:' + pair.port + '/m' }}
+          <n-button size="small" style="margin-top:8px;" @click="loadPair">重试</n-button>
+        </div>
+      </n-spin>
+    </n-card>
     <n-statistic label="当前主题" :value="themeStore.isDark ? '深色' : '浅色'" style="margin-bottom: 24px; max-width: 300px;">
       <template #prefix>
         <span>{{ themeStore.isDark ? '🌙' : '🌞' }}</span>

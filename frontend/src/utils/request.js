@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+// R-014: 同源相对路径(生产由后端挂载 dist 单端口服务;dev 经 vite proxy /api 转发)。
+// 硬编码 localhost 在手机经 LAN IP 访问时必指向手机自身——同源化为唯一正确形态。
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 // 请求实例（LLM 生成为长耗时请求，超时放宽到 5 分钟；流式走 fetch 不受此限制）
 const request = axios.create({

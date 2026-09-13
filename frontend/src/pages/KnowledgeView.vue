@@ -12,7 +12,7 @@ onMounted(() => {
 
 async function fetchFiles() {
   try {
-    const response = await fetch('http://localhost:8000/api/v1/kb/files')
+    const response = await fetch('/api/v1/kb/files')
     const data = await response.json()
     files.value = data.data.files || []
   } catch (error) {

@@ -74,6 +74,13 @@
       "id": 1,
       "title": "后端pair/info+挂载",
       "module": "routes/pair.py,main.py,config.py",
+      "status": "done",
+      "verified": true
+    },
+    {
+      "id": 2,
+      "title": "前端MobileView+QR+同源base",
+      "module": "frontend",
       "status": "in_progress",
       "verified": false
     }
@@ -139,5 +146,5 @@
     "last_pushed_commit": "33f20533",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T10:30:00+08:00"
+  "updated_at": "2026-09-13T10:45:00+08:00"
 }

@@ -3,13 +3,31 @@
   "req_type": "feature",
   "base_requirements": [],
   "project": "sunchat",
-  "phase": "architecture",
+  "phase": "execute",
   "gates": [
     {
       "gate": "requirements_confirmed",
       "at": "2026-09-13T10:12:00+08:00",
       "confirmed_by": "user",
       "note": "question明示确认;合规前置 gate:requirements FAIL=0"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-13T10:25:00+08:00",
+      "confirmed_by": "user",
+      "note": "question确认C1-C6+风险表"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-13T10:25:00+08:00",
+      "confirmed_by": "user",
+      "note": "question确认mobile-pair接口"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-13T10:30:00+08:00",
+      "confirmed_by": "user",
+      "note": "question确认3步计划"
     }
   ],
   "clarifications": [
@@ -44,8 +62,22 @@
       "status": "closed"
     }
   ],
-  "modules": [],
-  "steps": [],
+  "modules": [
+    {
+      "name": "mobile-pair",
+      "design_doc": "modules/mobile-pair.md",
+      "design_done": true
+    }
+  ],
+  "steps": [
+    {
+      "id": 1,
+      "title": "后端pair/info+挂载",
+      "module": "routes/pair.py,main.py,config.py",
+      "status": "in_progress",
+      "verified": false
+    }
+  ],
   "analyses": [
     {
       "id": "A-1",
@@ -107,5 +139,5 @@
     "last_pushed_commit": "33f20533",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T10:12:00+08:00"
+  "updated_at": "2026-09-13T10:30:00+08:00"
 }

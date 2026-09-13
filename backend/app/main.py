@@ -4,11 +4,12 @@ SunChat Backend - Main Application Entry Point
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.config import settings, DATA_DIR, UPLOAD_DIR
-from app.api.v1.routes import auth, chat, memories, search, knowledge, health, models, agent, speech
+from app.api.v1.routes import auth, chat, memories, search, knowledge, health, models, agent, speech, pair
 
 
 @asynccontextmanager
@@ -108,6 +109,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router, prefix="/api/v1", tags=["knowledge"])
     app.include_router(agent.router, prefix="/api/v1", tags=["agent"])
     app.include_router(speech.router, prefix="/api/v1", tags=["speech"])
+    app.include_router(pair.router, prefix="/api/v1", tags=["pair"])  # R-014
 
     return app
 
@@ -115,9 +117,20 @@ def create_app() -> FastAPI:
 # 创建应用实例
 app = create_app()
 
+# ==================== R-014: SPA 静态服务(移动端/桌面同源单端口) ====================
+# 模块级变量便于测试 monkeypatch;构建产物不存在时优雅跳过(纯 API 模式/dev 流不变)。
+FRONTEND_DIST = settings.FRONTEND_DIST or str(
+    Path(__file__).resolve().parent.parent.parent / "frontend" / "dist")
+
+
+def _dist_ready() -> bool:
+    return (Path(FRONTEND_DIST) / "index.html").is_file()
+
 
 @app.get("/")
 def root():
+    if _dist_ready():
+        return FileResponse(Path(FRONTEND_DIST) / "index.html")
     return {
         "message": "SunChat API",
         "version": "1.0.0",
@@ -137,6 +150,25 @@ def whoami():
             "mode": "local-single-user"
         }
     }
+
+
+@app.get("/{full_path:path}")
+def spa_static(full_path: str):
+    """R-014: SPA 直链与静态资源(history 路由)。api/ 前缀不劫持(与既有 404 一致);
+    resolve+relative_to 防路径穿越(R-005 同源教训)。"""
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not _dist_ready():
+        raise HTTPException(status_code=404, detail="frontend not built")
+    base = Path(FRONTEND_DIST).resolve()
+    candidate = (base / full_path).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if candidate.is_file():
+        return FileResponse(candidate)
+    return FileResponse(base / "index.html")
 
 
 if __name__ == "__main__":

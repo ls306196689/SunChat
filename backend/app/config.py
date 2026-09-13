@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # 应用配置
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    PUBLIC_PORT: int = 0  # R-014: 二维码展示端口(反代/换端口场景覆盖;0=取 APP_PORT)
+    FRONTEND_DIST: str = ""  # R-014: SPA 静态目录覆盖(空=自动探测 ../frontend/dist)
     DEBUG: bool = True
 
     # 单用户本地模式：统一用户标识（全项目引用，避免散落硬编码 user_id=1）

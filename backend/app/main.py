@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.config import settings, DATA_DIR, UPLOAD_DIR
-from app.api.v1.routes import auth, chat, memories, search, knowledge, health, models, agent, speech, pair
+from app.api.v1.routes import (auth, chat, memories, search, knowledge, health,
+                               models, agent, speech, pair, diag)
 
 
 @asynccontextmanager
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     app.include_router(agent.router, prefix="/api/v1", tags=["agent"])
     app.include_router(speech.router, prefix="/api/v1", tags=["speech"])
     app.include_router(pair.router, prefix="/api/v1", tags=["pair"])  # R-014
+    app.include_router(diag.router, prefix="/api/v1", tags=["diag"])  # R-016
 
     return app
 
@@ -127,10 +129,15 @@ def _dist_ready() -> bool:
     return (Path(FRONTEND_DIST) / "index.html").is_file()
 
 
+# R-016/FR-3: index.html 禁强缓存(旧页复活=A-2 缺陷面);assets 层保持协商即可
+_HTML_HEADERS = {"Cache-Control": "no-cache"}
+
+
 @app.get("/")
 def root():
     if _dist_ready():
-        return FileResponse(Path(FRONTEND_DIST) / "index.html")
+        return FileResponse(Path(FRONTEND_DIST) / "index.html",
+                            headers=_HTML_HEADERS)
     return {
         "message": "SunChat API",
         "version": "1.0.0",
@@ -155,7 +162,9 @@ def whoami():
 @app.get("/{full_path:path}")
 def spa_static(full_path: str):
     """R-014: SPA 直链与静态资源(history 路由)。api/ 前缀不劫持(与既有 404 一致);
-    resolve+relative_to 防路径穿越(R-005 同源教训)。"""
+    resolve+relative_to 防路径穿越(R-005 同源教训)。
+    R-016/FR-3: /assets/ 缺失 → 404 JSON(杜绝 index.html 冒充 JS 毒缓存);
+    index.html 响应带 no-cache(旧 bundle 复活治理)。"""
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not Found")
     if not _dist_ready():
@@ -167,8 +176,12 @@ def spa_static(full_path: str):
     except ValueError:
         raise HTTPException(status_code=404, detail="Not Found")
     if candidate.is_file():
+        if full_path == "index.html":
+            return FileResponse(candidate, headers=_HTML_HEADERS)
         return FileResponse(candidate)
-    return FileResponse(base / "index.html")
+    if full_path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="asset not found")
+    return FileResponse(base / "index.html", headers=_HTML_HEADERS)
 
 
 if __name__ == "__main__":

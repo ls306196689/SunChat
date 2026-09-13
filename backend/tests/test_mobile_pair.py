@@ -56,6 +56,26 @@ class TestStaticHosting:
         r = client.get("/..%2f..%2fetc%2fpasswd")
         assert r.status_code in (404, 400)
 
+    def test_index_no_cache(self, client, dist_tmp, monkeypatch):
+        """R-016/AC-2→index.html 承载响应(/ //m/回退)均带 no-cache"""
+        monkeypatch.setattr(main_mod, "FRONTEND_DIST", str(dist_tmp))
+        for p in ("/", "/m", "/some/unknown/route"):
+            r = client.get(p)
+            assert r.status_code == 200 and r.headers.get("cache-control") == "no-cache", p
+
+    def test_assets_missing_404_json(self, client, dist_tmp, monkeypatch):
+        """R-016/AC-2→/assets/* 缺失 404 JSON(杜绝 HTML 冒充 JS 毒缓存)"""
+        monkeypatch.setattr(main_mod, "FRONTEND_DIST", str(dist_tmp))
+        r = client.get("/assets/index-STALE123.js")
+        assert r.status_code == 404
+        assert "text/html" not in r.headers.get("content-type", "")
+        assert r.json()["detail"] == "asset not found"
+
+    def test_assets_real_served_plain(self, client, dist_tmp, monkeypatch):
+        monkeypatch.setattr(main_mod, "FRONTEND_DIST", str(dist_tmp))
+        r = client.get("/assets/app.js")
+        assert r.status_code == 200 and r.headers.get("cache-control") is None
+
 
 class TestPairInfo:
     """AC-2→test_pair_info_shape/test_pair_info_lan_probe_mock/test_pair_info_no_lan"""

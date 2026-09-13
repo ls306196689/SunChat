@@ -6,8 +6,10 @@ import { useChatStore } from '@/stores/chat'
 import {
   uploadChatImage, uploadVideoFrames, transcribeSpeech, speechStatus, chatImageUrl
 } from '@/utils/request'
+import { diagInit, diagStep, diagError, newReqId } from '@/utils/mobileDiag'  // R-016
 
 const chatStore = useChatStore()
+const diag = diagStep  // 简写
 const input = ref('')
 const sending = ref(false)
 const errMsg = ref('')
@@ -27,6 +29,7 @@ let recorder = null
 let audioChunks = []
 
 onMounted(async () => {
+  diagInit('/m')  // R-016: 诊断通道(默认开启,阶段事件批量回传)
   micSupported.value = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
   try {
     await chatStore.fetchSessions()
@@ -54,38 +57,20 @@ async function onPickVideo(e) {
 }
 
 async function attachAndUpload(file, kind) {
-  const item = { kind, localUrl: URL.createObjectURL(file), file, status: 'uploading', ids: [], error: '' }
+  const reqId = newReqId()
+  diag('upload.pick', { reqId, name: file.name, size: file.size, type: file.type })
+  const item = { kind, reqId, localUrl: URL.createObjectURL(file), file, status: 'uploading', ids: [], error: '' }
   pending.value.push(item)
-  try {
-    if (kind === 'image') {
-      const r = await uploadChatImage(file)
-      const id = r?.data?.data?.image_id ?? r?.data?.image_id ?? r?.image_id  // R-012 双写防御
-      if (!id) throw new Error('响应缺少 image_id')
-      item.ids = [id]
-    } else {
-      const r = await uploadVideoFrames(file)
-      const ids = r?.data?.data?.frame_ids ?? r?.data?.frame_ids ?? r?.frame_ids
-      if (!ids || !ids.length) throw new Error('未解出帧')
-      item.ids = ids
-    }
-    item.status = 'done'
-  } catch (err) {
-    item.status = 'error'
-    item.error = err.response?.data?.detail || err.message
-  }
+  await doUpload(item)
 }
 
-function removePending(i) {
-  URL.revokeObjectURL(pending.value[i].localUrl)
-  pending.value.splice(i, 1)
-}
-async function retryPending(i) {
-  const item = pending.value[i]
-  item.status = 'uploading'; item.error = ''
+async function doUpload(item) {   // attach 与 retry 共用埋点路径(R-016)
+  const t0 = Date.now()
+  diag('upload.start', { reqId: item.reqId, kind: item.kind, size: item.file.size })
   try {
     if (item.kind === 'image') {
       const r = await uploadChatImage(item.file)
-      const id = r?.data?.data?.image_id ?? r?.data?.image_id ?? r?.image_id
+      const id = r?.data?.data?.image_id ?? r?.data?.image_id ?? r?.image_id  // R-012 双写防御
       if (!id) throw new Error('响应缺少 image_id')
       item.ids = [id]
     } else {
@@ -95,10 +80,30 @@ async function retryPending(i) {
       item.ids = ids
     }
     item.status = 'done'
+    diag('upload.ok', { reqId: item.reqId, ms: Date.now() - t0 })
   } catch (err) {
     item.status = 'error'
-    item.error = err.response?.data?.detail || err.message
+    item.error = uploadFailNote(err, item)
+    diagError('upload.fail', err)
   }
+}
+
+function uploadFailNote(err, item) {
+  // FR-5: 悬挂/超时显式化(含 reqId,与服务器日志对账)
+  const d = err.response?.data?.detail
+  if (err.code === 'ECONNABORTED') return `上传超20s超时:检查Wi-Fi后重试(req ${item.reqId})`
+  return d || `${err.message || '上传失败'}(req ${item.reqId})`
+}
+
+function removePending(i) {
+  URL.revokeObjectURL(pending.value[i].localUrl)
+  pending.value.splice(i, 1)
+}
+async function retryPending(i) {
+  const item = pending.value[i]
+  item.status = 'uploading'; item.error = ''
+  diag('upload.retry', { reqId: item.reqId, kind: item.kind })
+  await doUpload(item)
 }
 
 async function send() {
@@ -113,10 +118,13 @@ async function send() {
   pending.value = []
   sending.value = true
   scrollBottom()
+  diag('send.start', { textLen: (text || '').length, imgs: imgs.length })
   try {
     await chatStore.sendMessage(text || '请描述这些图片', true, true, imgs)
+    diag('send.stream.ok', {})
   } catch (err) {
     errMsg.value = err?.response?.data?.detail || err?.message || '发送失败'
+    diagError('send.err', err)
   } finally {
     sending.value = false
     scrollBottom()
@@ -140,9 +148,11 @@ async function toggleMic() {
     }
     recorder.start()
     recording.value = true
-  } catch {
+    diag('mic.grant', {})
+  } catch (err) {
     micSupported.value = false
     errMsg.value = '麦克风不可用(非HTTPS禁麦),请用下方"音频文件"'
+    diagError('mic.deny', err)
   }
 }
 async function onPickAudio(e) {
@@ -157,8 +167,10 @@ async function doTranscribe(blobOrFile) {
     const t = ((r?.data?.text ?? r?.text) || '').trim()
     if (t) input.value = input.value.trim() ? input.value.trimEnd() + ' ' + t : t
     else errMsg.value = '未识别到语音内容'
+    diag('transcribe.ok', { chars: t.length })
   } catch (err) {
     errMsg.value = '转写失败: ' + (err.response?.data?.detail || err.message)
+    diagError('transcribe.fail', err)
   } finally { transcribing.value = false }
 }
 

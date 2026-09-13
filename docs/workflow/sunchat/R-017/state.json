@@ -59,21 +59,21 @@
     },
     {
       "id": "4",
-      "status": "in_progress",
-      "title": "pose-skeleton实现+单测(v2小改:crop_bbox)",
-      "verified": false
+      "status": "done",
+      "title": "pose-skeleton实现+单测(v2:crop_bbox)",
+      "verified": true
     },
     {
       "id": "5",
       "status": "done",
-      "title": "pose-report实现+单测",
+      "title": "pose-report实现+单测(v2:透明度行)",
       "verified": true
     },
     {
       "id": "6",
-      "status": "pending",
-      "title": "端点+迁移+单测(v2重做)",
-      "verified": false
+      "status": "done",
+      "title": "端点+迁移+单测(v2:no_activity+透传+裁剪+日志)",
+      "verified": true
     },
     {
       "id": "7",
@@ -84,7 +84,8 @@
     {
       "id": "8",
       "status": "in_progress",
-      "title": "真机活体验收"
+      "title": "真机活体验收(v2):真人实拍对账(稀释bug复测)+run-evidence",
+      "verified": false
     }
   ],
   "clarifications": [
@@ -166,8 +167,8 @@
       "id": "R-7",
       "desc": "粗扫5fps处于髋2f奈奎斯特临界,可能漏检高速碎步",
       "level": "med",
-      "status": "open",
-      "note": "实装夹具断言不漏检,漏则升8fps"
+      "status": "closed",
+      "note": "实装证实5fps频带混叠不可判(debug-log D-4);对策改道:粗扫仅能量剔死段,走路等由密采终判门cad∈[125,240]拒析;夹具AC-7不漏检断言通过,未升8fps"
     },
     {
       "id": "R-8",
@@ -198,7 +199,7 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T23:36:12+08:00",
+  "updated_at": "2026-09-14T02:15:00+08:00",
   "modules": [
     {
       "id": "P1",

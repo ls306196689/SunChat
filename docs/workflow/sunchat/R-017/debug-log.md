@@ -30,3 +30,21 @@
   竖直法对机位横移/倾斜天然鲁棒(去趋势消倾斜)。
 - 验证:新 fixture 双机位(固定横穿/跟随)cadence 恒 181.3≈180(±0.7%);
   机位无关性 test×2 入档为永久护栏;test_pose_core 12/12;全量 318+1skip 零回归。
+
+## D-3 step-3v2 slo 主周期假阳性(已 resolved)
+- 复现:AC-8 slo×4 夹具 dense 6.25fps → 髋y 自相关 lag 命中去趋势窗边(lag=3),
+  半步伪分不合并,n_ic 虚增 → display cad 46.9×4=187 但 cycles 少、ssr 差。
+- 证据:打印 ics 序列 gap=[0.48(假),1.44,1.28...];l0=lo*fps=1.56→2 允许窗边 lag;
+  _dominant_lag 加 min_lag=3 + _segment 主周期窗 hi×slo → lag 找到真周期(≈25帧)。
+- 验证:AC-8 cad=187.5(真180,rel 4.2%)∈±10%;全量绿。
+
+## D-4 step-3v2 粗扫频带判定在 5fps 混叠死区(已 resolved,R-7 成真→按预案对策)
+- 复现:走路/短跑/站立各类粗扫 lms,FFT 判跑门恒误杀或恒泄漏(run_ratio 带通 irfft
+  掩码 13 点仅边缘 2 帧命中——混叠后频带不可辨识)。
+- 证据:[RUN] debug 打印:跑 1.5Hz 在 5fps 下主频 bin 1.45Hz 可辨,走路 0.85Hz 混叠
+  至同带;2.2s 窗 pk/md 比值受窗长截断支配(0.86~2.36 抖动),阈不可定。
+- 处置(⚠R-7 预案"漏则升8fps"修正为更优路径):频带判定**移出粗扫**,粗扫只以
+  raw-std 能量剔站立死段;走路等误检由密采后**终判门** cad∉[POSE_RUN_MIN_CAD,240]
+  拒之 no_activity(密采 ≥20fps 带内可靠)。粗扫 5fps 保留(提速目标达成,漏检风险
+  由能量门覆盖——死段判据是"无振荡"而非"频率")。
+- 验证:AC-7 mixed=pure±<5%、走路 no_activity、全量 340+1skip 零回归。

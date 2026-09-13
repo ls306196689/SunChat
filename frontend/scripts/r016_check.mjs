@@ -14,6 +14,9 @@ const t = (name, cond, why = '') => {
 const req = read('../src/utils/request.js')
 t('test_no_explicit_multipart_ct', !req.includes('multipart/form-data'),
   'request.js 仍含显式 multipart CT')
+const uploads = req.match(/export function upload\w+[\s\S]*?\n}/g) || []
+t('test_all_uploads_ct_undefined', uploads.length === 2 && uploads.every(u => u.includes("'Content-Type': undefined")),
+  '两个上传函数均应显式 CT undefined(视频漏网=R-010回归根因)')
 t('test_upload_timeout_20s',
   /uploadChatImage[\s\S]*?timeout: 20000/.test(req) &&
   /transcribeSpeech[\s\S]*?timeout: 20000/.test(req) &&

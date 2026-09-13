@@ -101,5 +101,5 @@ export function speechStatus() {
 export function uploadVideoFrames(file) {
   const form = new FormData()
   form.append('file', file)
-  return request.post('/chat/video/frames', form, { timeout: 120000 })  // 抽帧慢任务,R-010 约定
+  return request.post('/chat/video/frames', form, { headers: { 'Content-Type': undefined }, timeout: 120000 })  // 抽帧慢任务,R-010 约定;R-016 同款 CT undefined
 }

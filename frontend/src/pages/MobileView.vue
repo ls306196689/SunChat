@@ -206,7 +206,8 @@ async function newSession() {
 
     <div v-if="pending.length" class="mv-pend">
       <div v-for="(p, i) in pending" :key="i" class="mv-pitem">
-        <img :src="p.localUrl" :alt="p.kind" />
+        <video v-if="p.kind === 'video'" :src="p.localUrl + '#t=0.1'" muted playsinline preload="metadata"></video>
+        <img v-else :src="p.localUrl" :alt="p.kind" />
         <span v-if="p.status === 'uploading'" class="mv-spin">上传中…</span>
         <button v-else-if="p.status === 'error'" class="mv-retry" @click="retryPending(i)">重试</button>
         <button class="mv-x" @click="removePending(i)">×</button>
@@ -246,7 +247,7 @@ async function newSession() {
 .mv-text { white-space: pre-wrap; }
 .mv-pend { display: flex; gap: 8px; overflow-x: auto; padding: 6px 12px; background: #fff; border-top: 1px solid #e5e7eb; }
 .mv-pitem { position: relative; flex: 0 0 auto; }
-.mv-pitem img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+.mv-pitem img, .mv-pitem video { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; display: block; background: #000; }
 .mv-spin, .mv-retry { position: absolute; bottom: 2px; left: 2px; font-size: 11px; background: rgba(0,0,0,.6); color: #fff; padding: 1px 5px; border-radius: 6px; border: none; }
 .mv-x { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: none; background: #1118; color: #fff; }
 .mv-perr { font-size: 11px; color: #dc2626; max-width: 70px; }

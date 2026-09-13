@@ -24,7 +24,7 @@
 | CH-4 | 新增 | `core/pose_skeleton.py`(相位选帧+骨架标注 JPEG) | FR-4 | 是(输出走 R-008 落盘约定,写入同 CHAT_IMAGE_DIR) |
 | CH-5 | 修改 | 前端 request.js 增 `analyzeVideoPose()`(CT undefined+timeout 180s);MobileView/ChatView 增"跑步分析"按钮+等待态+报告卡渲染 | FR-6,7 | 是(新函数新按钮,既有不动) |
 | CH-6 | 修改 | config 增 `POSE_*` 组(采样fps/置信度阈值/最少周期数/模型路径/报告降级开关) | FR-1,3,5 | 是(纯增) |
-| CH-7 | 新增(消息侧) | 报告以 assistant 消息落库:正文=报告文本,`images`=骨架帧 ids,新增 `extra` 字段存指标 JSON(消息表加列,存量为 NULL) | FR-5,决策D-005 | 列迁移=SQLite `ALTER ADD COLUMN`(R-004 同款幂等迁移) |
+| CH-7 | 修改 | 报告以 assistant 消息落库:正文=报告文本,`images`=骨架帧 ids,消息表新增 `extra` 列存指标 JSON(存量 NULL);`save_assistant_message` 追加默认参 images/extra(调用方零改动) | FR-5,决策D-005 | 列迁移=SQLite `ALTER ADD COLUMN`(R-004 同款幂等) |
 
 ## 模块划分(增量)
 | # | 模块 | 职责边界 | 依赖 | 文档 |

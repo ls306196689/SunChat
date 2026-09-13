@@ -14,3 +14,4 @@ memory-retrieval-opt/design/,2026-09-06 产出,经用户确认迁移时沿用,20
 | 2026-09-11 | R-009 | 基线 → R-009(2026-09-11): 新增 speech-in 模块(本地faster-whisper语音转写,确认式交互,运行期离线);见 design/modules/speech-in.md |
 | 2026-09-11 | R-010 | 基线 → R-010(2026-09-11): chat-image 附录:视频抽帧输入(PyAV均匀采样,帧复用图片通道);全模态三期完成 |
 | 2026-09-12 | R-013 | 基线 → R-013(2026-09-12): 新增 observability 横切模块(trace关联/evt环节事件/聚合降噪/http摘要替代uvicorn.access/日志设计规范FR-6);见 design/modules/observability.md |
+| 2026-09-13 | R-014 | 基线 → R-014(2026-09-13): 新增 mobile-pair 模块(局域网手机扫码接入:pair/info+SPA同源挂载+/m移动会话页);见 design/modules/mobile-pair.md |

@@ -32,5 +32,28 @@ feat(R-014/step-1) / feat(R-014/step-2) / test+docs(R-014): archive
 环节: pair.info(ok/fail,no_lan reason)/ http 摘要既有 / chat.stream 等复用自动继承;
 新增 evt=pair.info 单测断言可 grep;无高频新增。
 
-## 总结
-{{final_summary}}
+## 总结(归档 2026-09-13)
+### AC 对照(全过)
+| AC | 证据 |
+|---|---|
+| AC-1 | test_mobile_pair 11用例双态(挂载5含穿越/dev原行为404)全绿;实机 /m 200 text/html、/ 200、api 404 不劫持 |
+| AC-2 | shape/mock/override/no_lan 单测绿;实机 curl pair/info 返回真实 lan_ip=192.168.1.47;(RUN 抓出端口缺陷已修 D-r014-1:PUBLIC_PORT>Host头>APP_PORT,复验 url 含实际 8090) |
+| AC-3 | Settings QR 卡片代码断言(r014_check::test_settings_pair_qr)+实机同源 /m 200;SSE 实流样本 run-evidence/sse_sample.txt(meta+done 帧) |
+| AC-4 | 真实 PNG E2E:上传→vision 看图描述(响应见 run-evidence/evt_log_sample.txt);历史接口 messages 含 images 字段契约回显 |
+| AC-5 | wav 上传 /speech/transcribe 200(转写空文本正常=正弦音无语音);移动端 audio 兜底路径代码断言(r014_check test_mobile_view_contract 含 audio/*+getUserMedia 双路) |
+| AC-6 | `pytest tests/` **275 passed,1 skipped**(基线263+R-014 11 零回归,+1 pair端口修复用例);`vite build` 通过;`node scripts/r014_check.mjs` 8/8 |
+
+### 全量测试摘要
+后端 `python -m pytest tests/ -q` → 275 passed/1 skipped;前端 build ✓ + r014_check 8/8;实机 RUN(LAN IP 全通道)见 run-evidence/。
+
+### 风险终态
+R-1 closed(同源+SPA回退+SSE fetch 实机验证);R-2 closed(D-142 双路断言);R-3 closed(可信内网边界声明,文档注记);R-4 closed(复用 50MB/threadpool,冒烟通过);R-5 closed(双态单测+dev 零影响验证)。
+
+### 产出/commit
+pair.py+main.py SPA挂载+config+MobileView.vue+router+/m+Settings QR+request三处同源化+r014_check.mjs;commit c9fcbd75(step-1)+378053b1(+fix step-2)+607df93b(step-3)+本归档。
+
+## 自我复盘清单
+沉淀(已入台账,状态如实):OPT-008 后台服务子shell脱离(landed/RUN实践)/
+OPT-009 失败先干净树归因(lint 存量断裂,live 教训)/OPT-010 E2E 冒烟数据须真可解码
+(假PNG被vision拒,landed);另登记 skill issue-007(closing 台账跨仓路径)。
+无未入库遗漏。

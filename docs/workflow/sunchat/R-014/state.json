@@ -3,7 +3,7 @@
   "req_type": "feature",
   "base_requirements": [],
   "project": "sunchat",
-  "phase": "execute",
+  "phase": "done",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -28,6 +28,12 @@
       "at": "2026-09-13T10:30:00+08:00",
       "confirmed_by": "user",
       "note": "question确认3步计划"
+    },
+    {
+      "gate": "archived",
+      "at": "2026-09-13T11:10:00+08:00",
+      "confirmed_by": "user",
+      "note": "archive FAIL门禁通过(question 确认冻结序列已含归档意图,D-305双停留由本次最终报告+plan自我复盘清单承载;合规archive节点FAIL=0)"
     }
   ],
   "clarifications": [
@@ -88,8 +94,8 @@
       "id": 3,
       "title": "实机RUN全通道",
       "module": "integration",
-      "status": "in_progress",
-      "verified": false
+      "status": "done",
+      "verified": true
     }
   ],
   "analyses": [
@@ -111,15 +117,7 @@
       "prob": "高",
       "impact": "低",
       "mitigation": "响应式+实机E2E验收;SSE用fetch流式回退轮询预案",
-      "status": "open"
-    },
-    {
-      "id": "R-2",
-      "desc": "getUserMedia(录音/摄像头)在非localhost的HTTP下被浏览器禁用",
-      "prob": "高",
-      "impact": "中",
-      "mitigation": "澄清C2:自签TLS证书 或 录音降级为文件上传",
-      "status": "open"
+      "status": "closed"
     },
     {
       "id": "R-3",
@@ -127,7 +125,7 @@
       "prob": "中",
       "impact": "中",
       "mitigation": "声明边界=可信家内网(与现状一致);扫码配对不引入账户体系;不做穿透",
-      "status": "open"
+      "status": "closed"
     },
     {
       "id": "R-4",
@@ -135,7 +133,7 @@
       "prob": "中",
       "impact": "低",
       "mitigation": "复用 VIDEO_MAX_MB=50 现限+run_in_threadpool(R-010既有);前端压缩提示",
-      "status": "open"
+      "status": "closed"
     },
     {
       "id": "R-5",
@@ -143,7 +141,7 @@
       "prob": "中",
       "impact": "低",
       "mitigation": "dist缺失时仅返回挂载跳过,dev流零变化",
-      "status": "open"
+      "status": "closed"
     }
   ],
   "repo": {

@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     VIDEO_MAX_MB: int = 50  # 视频上传上限
     VIDEO_MAX_FRAMES: int = 4  # 均匀抽帧数（与单消息图片上限对齐）
 
+    # 姿态分析约束（R-017）
+    POSE_MODEL_PATH: str = str(DATA_DIR / "pose-models" / "pose_landmarker_lite.task")
+    POSE_SAMPLE_FPS: float = 20.0        # 采样帧率（步态周期≈0.7s,20fps 足够）
+    POSE_MAX_SAMPLE_FRAMES: int = 400    # 采样帧上限,超限自动加大步距（R-2 缓解）
+    POSE_MIN_CONF: float = 0.5           # 关键点置信度均值门槛（FR-3）
+    POSE_MIN_CYCLES: int = 2             # 可切分步态周期数门槛
+    POSE_MIN_BODY_RATIO: float = 0.12    # 人体包围盒高/画面高 门槛
+    POSE_REPORT_TIMEOUT: int = 120       # 报告 VL 调用超时秒（独立于 LLM_*）
+
     # 搜索配置
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本
     SEARCH_TIMEOUT: int = 10  # 搜索超时（秒）

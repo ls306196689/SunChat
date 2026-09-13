@@ -28,3 +28,7 @@ pypdf==5.1.0
 
 # ASR 语音转文字 (R-009, 本地 faster-whisper, av 免系统 ffmpeg)
 faster-whisper>=1.0.0
+
+# 姿态估计 (R-017, MediaPipe Pose tasks API;锁版=与 numpy1.26.4/chromadb 共存已实测,
+# mediapipe>=1.0 强制 numpy2 会破坏 chromadb 约束——禁止自动升级)
+mediapipe==0.10.35

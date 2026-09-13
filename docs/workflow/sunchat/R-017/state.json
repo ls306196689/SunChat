@@ -41,12 +41,13 @@
     },
     {
       "id": "2",
-      "status": "in_progress",
-      "title": "依赖与模型预置"
+      "status": "done",
+      "title": "依赖与模型预置",
+      "verified": true
     },
     {
       "id": "3",
-      "status": "pending",
+      "status": "in_progress",
       "title": "pose-core实现+单测"
     },
     {
@@ -113,7 +114,7 @@
       "desc": "mediapipe与numpy1.26/opencv栈冲突",
       "level": "med",
       "status": "closed",
-      "note": "锁mediapipe==0.10.35,venv冒烟共存实测2026-09-13[RUN]"
+      "note": "锁0.10.35;后端环境实测:mediapipe强升numpy2.2→回钉1.26.4后mp/cv2/chromadb共存,全量pytest 282+1skip零回归;推理11.3ms/帧CPU[RUN]"
     },
     {
       "id": "R-2",
@@ -158,7 +159,7 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T16:32:51+08:00",
+  "updated_at": "2026-09-13T16:35:41+08:00",
   "modules": [
     {
       "id": "P1",

@@ -68,11 +68,19 @@ class Settings(BaseSettings):
     # 姿态分析约束（R-017）
     POSE_MODEL_PATH: str = str(DATA_DIR / "pose-models" / "pose_landmarker_lite.task")
     POSE_SAMPLE_FPS: float = 20.0        # 采样帧率（步态周期≈0.7s,20fps 足够）
-    POSE_MAX_SAMPLE_FRAMES: int = 400    # 采样帧上限,超限自动加大步距（R-2 缓解）
+    POSE_MAX_SAMPLE_FRAMES: int = 600    # 段内密采帧上限,超限自动加大步距（R-2 缓解;R-017v2 400→600）
     POSE_MIN_CONF: float = 0.5           # 关键点置信度均值门槛（FR-3）
     POSE_MIN_CYCLES: int = 2             # 可切分步态周期数门槛
     POSE_MIN_BODY_RATIO: float = 0.12    # 人体包围盒高/画面高 门槛
     POSE_REPORT_TIMEOUT: int = 120       # 报告 VL 调用超时秒（独立于 LLM_*）
+    # R-017 v2:真实帧率/关键段/密采/配速（design-change r2, analysis A-1~A-4）
+    POSE_COARSE_FPS: float = 5.0         # 粗扫帧率（定位跑动段,FR-9;R-7 漏检则升8）
+    POSE_DENSE_FPS: float = 25.0         # 段内密采帧率（FR-10;180spm 时 stance≥3帧）
+    POSE_MAX_SEGMENT_SEC: float = 8.0    # 参与分析的最强跑动段总时长上限
+    POSE_ACTIVITY_MIN_SEC: float = 1.5   # 有效跑动段最短时长,不足拒析 no_activity
+    POSE_RUN_MIN_CAD: float = 125.0      # 窗口判"跑"的步频下限(步/分;走路≈100-120)
+    POSE_USER_HEIGHT_CM: float = 0.0     # 身高(米/像素自标定算配速用;0=不输出配速 FR-11)
+    POSE_SLO_RESTORE: bool = True        # 慢动作倍速还原(FR-8)
 
     # 搜索配置
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本

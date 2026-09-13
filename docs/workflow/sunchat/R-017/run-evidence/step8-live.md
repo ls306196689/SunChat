@@ -8,3 +8,7 @@
 - [ ] AC-3 骨架帧 /chat/images 回显 200:随 AC-1 一并进行
 - [ ] AC-4 活体降级:当前会话模型即非 VL 语境,实拍完成时 report_source 应为 template(或切 VL 后 vl)
 - 注:合成视频无法替代真人关键点检出(lite 模型对卡通剪影不敏感),真实视频豁免项按计划声明
+- [x] AC-3 渲染层证据(OPT-011,headless iPhone-390x844+桌面1280x800,playwright DOM 断言+截图入本目录):
+      mobile_has_pose_btn=true / guide_modal=true(弹出且含路跑+跑步机双支)=guide_two_scenes /
+      guide 取消关闭=true / desktop "🏃 跑步分析"按钮=true
+      (截图 mobile_pose_guide.png / desktop_pose_btn.png)

@@ -4,7 +4,8 @@
 import { ref, nextTick, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import {
-  uploadChatImage, uploadVideoFrames, transcribeSpeech, speechStatus, chatImageUrl
+  uploadChatImage, uploadVideoFrames, transcribeSpeech, speechStatus, chatImageUrl,
+  analyzeVideoPose
 } from '@/utils/request'
 import { diagInit, diagStep, diagError, newReqId } from '@/utils/mobileDiag'  // R-016
 
@@ -54,6 +55,39 @@ async function onPickVideo(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = ''
   for (const f of files) await attachAndUpload(f, 'video')
+}
+
+// ===== R-017: 跑步姿态分析 =====
+const poseRunning = ref(false)
+const showPoseGuide = ref(false)
+
+const poseInput = ref(null)
+
+function maybePoseGuideThenPick() {
+  if (!localStorage.getItem('pose_guide_seen')) { showPoseGuide.value = true; return }
+  poseInput.value && poseInput.value.click()
+}
+function poseGuideStart() {
+  localStorage.setItem('pose_guide_seen', '1')
+  showPoseGuide.value = false
+  poseInput.value && poseInput.value.click()
+}
+async function onPickPose(e) {
+  const f = (e.target.files || [])[0]
+  e.target.value = ''
+  if (!f) return
+  diag('pose.pick', { name: f.name, size: f.size })
+  poseRunning.value = true
+  errMsg.value = ''
+  try {
+    await analyzeVideoPose(f, chatStore.currentSession?.session_id)
+    await chatStore.fetchMessages(chatStore.currentSession?.session_id)
+    scrollBottom()
+    diag('pose.ok', {})
+  } catch (err) {
+    errMsg.value = err?.response?.data?.detail || err?.message || '跑姿分析失败'
+    diagError('pose.fail', err)
+  } finally { poseRunning.value = false }
 }
 
 async function attachAndUpload(file, kind) {
@@ -216,11 +250,28 @@ async function newSession() {
     </div>
     <p v-if="errMsg" class="mv-err">{{ errMsg }}</p>
 
+    <div v-if="showPoseGuide" class="mv-mask" @click.self="showPoseGuide = false">
+      <div class="mv-guide">
+        <b>🏃 跑步姿态分析 · 拍摄要点</b>
+        <ul>
+          <li>侧面架机:路跑=相机外侧 5~8m 跑过正面;跑步机=侧面平行跑带</li>
+          <li>全身入画、光线充足</li>
+          <li>跑过 2 秒以上(3~4 个完整步态),慢动作更佳</li>
+          <li>分析约 10~30 秒,勿离开页面</li>
+        </ul>
+        <div class="mv-guide-btns">
+          <button class="mv-btn" @click="showPoseGuide = false">取消</button>
+          <button class="mv-send" @click="poseGuideStart">选视频开始</button>
+        </div>
+      </div>
+    </div>
     <footer class="mv-in">
       <button class="mv-btn" :disabled="transcribing" @click="imgInput.click()">相册</button>
       <input ref="imgInput" type="file" accept="image/*" multiple hidden @change="onPickImages" />
       <button class="mv-btn" :disabled="transcribing" @click="$refs.videoInput.click()">视频</button>
       <input ref="videoInput" type="file" accept="video/*" hidden @change="onPickVideo" />
+      <button class="mv-btn" :disabled="poseRunning || transcribing" @click="maybePoseGuideThenPick">{{ poseRunning ? '分析中…' : '🏃分析' }}</button>
+      <input ref="poseInput" type="file" accept="video/*" hidden @change="onPickPose" />
       <button v-if="micSupported" class="mv-btn" :class="{ rec: recording }"
               :disabled="transcribing" @click="toggleMic">{{ recording ? '停止' : '麦克风' }}</button>
       <button v-else class="mv-btn" @click="$refs.audioInput.click()">音频文件</button>
@@ -257,4 +308,10 @@ async function newSession() {
 .mv-btn { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 10px; background: #f9fafb; font-size: 13px; }
 .mv-btn.rec { background: #fee2e2; border-color: #dc2626; color: #b91c1c; }
 .mv-send { padding: 8px 14px; border: none; border-radius: 10px; background: #2563eb; color: #fff; font-size: 15px; }
+.mv-mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 30; padding: 20px; }
+.mv-guide { background: #fff; border-radius: 14px; padding: 16px; max-width: 340px; }
+.mv-guide ul { margin: 8px 0; padding-left: 18px; font-size: 13px; line-height: 1.7; }
+.mv-guide-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+@keyframes pose-blink { 50% { opacity: .55; } }
+.mv-btn:disabled { opacity: .6; }
 </style>

@@ -103,3 +103,11 @@ export function uploadVideoFrames(file) {
   form.append('file', file)
   return request.post('/chat/video/frames', form, { headers: { 'Content-Type': undefined }, timeout: 120000 })  // 抽帧慢任务,R-010 约定;R-016 同款 CT undefined
 }
+
+// R-017: 跑步姿态分析(video → 报告+骨架帧,assistant 消息落库;分析型长任务 180s)
+export function analyzeVideoPose(file, sessionId) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('session_id', String(sessionId))
+  return request.post('/chat/video/pose', form, { headers: { 'Content-Type': undefined }, timeout: 180000 })
+}

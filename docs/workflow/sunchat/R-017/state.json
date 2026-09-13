@@ -72,12 +72,13 @@
     },
     {
       "id": "7",
-      "status": "in_progress",
-      "title": "前端双端+构建断言"
+      "status": "done",
+      "title": "前端双端+构建断言",
+      "verified": true
     },
     {
       "id": "8",
-      "status": "pending",
+      "status": "in_progress",
       "title": "真机活体验收"
     }
   ],
@@ -164,7 +165,7 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T16:55:25+08:00",
+  "updated_at": "2026-09-13T16:59:06+08:00",
   "modules": [
     {
       "id": "P1",

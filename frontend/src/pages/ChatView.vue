@@ -9,7 +9,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import SessionItem from '@/components/ui/SessionItem.vue'
 import { NInput, NButton, NSpace, NScrollbar, NModal, NButtonGroup } from 'naive-ui'
 import { marked } from 'marked'
-import { uploadChatImage, chatImageUrl, transcribeSpeech, speechStatus, uploadVideoFrames } from '@/utils/request'
+import { uploadChatImage, chatImageUrl, transcribeSpeech, speechStatus, uploadVideoFrames, analyzeVideoPose } from '@/utils/request'
 
 const chatStore = useChatStore()
 const memoryStore = useMemoryStore()
@@ -178,6 +178,42 @@ async function onVideoSelected(e) {
 function onImageSelected(e) {
   addImageFiles([...(e.target.files || [])])
   e.target.value = ''
+}
+
+// ==================== R-017: 跑步姿态分析 ====================
+const poseInputRef = ref(null)
+const poseRunning = ref(false)
+const showPoseGuide = ref(false)
+
+function maybePoseGuideThenPick() {
+  if (!localStorage.getItem('pose_guide_seen')) { showPoseGuide.value = true; return }
+  poseInputRef.value && poseInputRef.value.click()
+}
+function poseGuideStart() {
+  localStorage.setItem('pose_guide_seen', '1')
+  showPoseGuide.value = false
+  poseInputRef.value && poseInputRef.value.click()
+}
+async function onPoseSelected(e) {
+  const file = e.target.files && e.target.files[0]
+  e.target.value = ''
+  if (!file) return
+  if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+    message.error(`视频超过 ${MAX_VIDEO_MB}MB 限制: ${file.name}`)
+    return
+  }
+  let sid = chatStore.currentSession?.session_id
+  if (!sid) { const s = await chatStore.createSession(); sid = s?.session_id ?? s?.data?.session_id }
+  poseRunning.value = true
+  try {
+    await analyzeVideoPose(file, sid)
+    await chatStore.fetchMessages(sid)
+    message.success('跑姿分析完成')
+  } catch (err) {
+    message.error('跑姿分析失败: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    poseRunning.value = false
+  }
 }
 
 function onPaste(e) {
@@ -471,6 +507,26 @@ function isLoadingMessage(msg) {
       </div>
     </n-modal>
 
+    <n-modal
+      v-model:show="showPoseGuide"
+      preset="card"
+      title="🏃 跑步姿态分析 · 拍摄要点"
+      style="max-width: 460px"
+    >
+      <ul style="line-height: 1.9; margin: 0; padding-left: 20px">
+        <li><b>侧面架机</b>:路跑=相机外侧 5~8m,跑过相机正面;跑步机=侧面平行跑带固定拍</li>
+        <li>全身入画(头顶到脚踝不裁切),光线充足</li>
+        <li>跑过 <b>2 秒以上</b>(至少 3~4 个完整步态),慢动作 120fps 更佳</li>
+        <li>分析约需 10~30 秒,期间请勿离开页面</li>
+      </ul>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showPoseGuide = false">取消</n-button>
+          <n-button type="primary" @click="poseGuideStart">选择视频开始分析</n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
     <div class="chat-header">
       <n-space align="center" size="large">
         <n-button text @click="showSessionList = true">
@@ -622,6 +678,15 @@ function isLoadingMessage(msg) {
             >
               🎬 视频
             </n-button>
+            <n-button
+              title="跑步姿态分析:侧拍跑步视频 → 步频/膝角/骨盆侧倾等量化指标 + 教练报告(约10~30s)"
+              :loading="poseRunning"
+              :disabled="poseRunning"
+              @click="maybePoseGuideThenPick"
+            >
+              🏃 跑步分析
+            </n-button>
+            <input ref="poseInputRef" type="file" accept="video/*" style="display:none" @change="onPoseSelected" />
             <n-button @click="chatStore.clearMessages" :disabled="chatStore.messages.length === 0">
               清空消息
             </n-button>

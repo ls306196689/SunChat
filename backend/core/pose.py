@@ -154,45 +154,91 @@ def _angle(a, b, c) -> float:
     return math.degrees(math.acos(cosang))
 
 
-def _stance_intervals(pos_xy: np.ndarray, ts: np.ndarray, thresh_frac=0.35,
-                      min_stance=0.04, min_edge=0.08) -> List[Tuple[float, float]]:
-    """踝世界坐标 → [(触地IC, 离地TO), ...]。
+def _dominant_lag(sig: np.ndarray, fps: float,
+                  lo: float = 0.25, hi: float = 1.25):
+    """去均值自相关,lag∈[lo,hi]s 找主周期(D-3:固定机位下世界速度法失效的替代)。
 
-    跑步触地期踝相对地面近静止、摆动期快速前移 → 速度低速区间即 stance。
-    贴视频首尾 min_edge 内的开区间不计(边缘信息不完整)。
+    返回 (lag帧数, 归一化相关值);信号无周期/太短 → None。"""
+    n = len(sig)
+    if n < 8 or fps <= 0:
+        return None
+    x = sig - float(np.mean(sig))
+    e = float(np.dot(x, x))
+    if e <= 1e-12:
+        return None
+    ac = np.correlate(x, x, mode="full")[n - 1:] / e
+    l0 = max(int(lo * fps) + 1, 1)
+    l1 = min(int(hi * fps) + 1, n - 1)
+    if l1 <= l0:
+        return None
+    seg = ac[l0:l1]
+    i = int(np.argmax(seg))
+    return l0 + i, float(seg[i])
+
+
+def _detrend(sig: np.ndarray, win: int) -> np.ndarray:
+    win = max(3, int(win) | 1)
+    return sig - _smooth(sig, w=win)
+
+
+def _stance_intervals(sig: np.ndarray, ts: np.ndarray, lag=None, k_sigma=0.35,
+                      min_stance=0.04, min_edge=0.10) -> List[Tuple[float, float]]:
+    """踝竖直序列(画面 y,向下为正;落地=高值)→ [(IC, TO), ...]。
+
+    D-3 重做:旧"世界坐标低速=stance"仅在相机跟随跑者时成立,固定机位侧拍踝从
+    不静止 → 检出噪声(cadence 54 实测)。现法:以自相关主周期 lag 为窗去趋势
+    (消机位倾斜与身体慢晃),y > μ+kσ 区间即触地期;IC=入区,TO=出区。
     """
-    if len(pos_xy) < 4:
+    if len(sig) < 4:
         return []
-    dt = np.maximum(np.diff(ts), 1e-6)
-    speed = _smooth(np.linalg.norm(np.diff(pos_xy, axis=0), axis=1) / dt)
-    med = float(np.median(speed))
-    if med <= 0:
+    s = _smooth(np.asarray(sig, dtype=float), w=3)
+    if lag:
+        s = _detrend(s, win=lag)
+    mu, sd = float(np.mean(s)), float(np.std(s))
+    if sd <= 1e-9:
         return []
-    low = speed < thresh_frac * med
+    inb = s > mu + k_sigma * sd
     out, start = [], None
-    for i, lo in enumerate(low):
-        if lo and start is None:
+    for i, v in enumerate(inb):
+        if v and start is None:
             start = float(ts[i])
-        elif not lo and start is not None:
-            if (float(ts[i]) - start >= min_stance and start - float(ts[0]) >= min_edge):
+        elif not v and start is not None:
+            if (float(ts[i]) - start >= min_stance and
+                    start - float(ts[0]) >= min_edge):
                 out.append((start, float(ts[i])))
             start = None
+    # 半步伪分合并:相邻区间间距 < 0.35*周期窗(或无窗口时 <0.12s)视为同一次触地
+    if out:
+        mgap = 0.35 * (lag / (len(ts) / max(ts[-1] - ts[0], 1e-6))) if lag and lag > 1 else 0.12
+        merged = [out[0]]
+        for a, b in out[1:]:
+            if a - merged[-1][1] < mgap:
+                merged[-1] = (merged[-1][0], b)
+            else:
+                merged.append((a, b))
+        out = merged
     return out
 
 
-def _side_poses(lms: list, det: List[int], side: str) -> np.ndarray:
-    return np.asarray([[lms[i][IDX[side + "_ankle"]][0],
-                        lms[i][IDX[side + "_ankle"]][1]] for i in det])
+def _side_ankle_y(lms: list, det: List[int], side: str) -> np.ndarray:
+    return np.asarray([lms[i][IDX[side + "_ankle"]][1] for i in det])
 
 
 def _segment(lms: list, det: List[int], ts_a: np.ndarray, min_cycles: int):
-    """→ (cycles, ic_r, ic_l)。周期以右触地为界;右侧不足时以左侧兜底。"""
+    """→ (cycles, ic_r, ic_l)。D-3:主周期取髋竖直信号(双腿共因、比踝更稳),
+    左右踝 y 各自按区间法切stance;周期以多数侧的 IC 为界。"""
     pos_t = ts_a[det]
-    ic_r = _stance_intervals(_side_poses(lms, det, "R"), pos_t)
-    ic_l = _stance_intervals(_side_poses(lms, det, "L"), pos_t)
-    cycles, base = [], ic_r if len(ic_r) >= 2 else ic_l
+    fps = (len(pos_t) - 1) / max(float(pos_t[-1] - pos_t[0]), 1e-6)
+    hip_y = _smooth(np.asarray([lms[i][IDX["L_hip"]][1] for i in det]), w=3)
+    dl = _dominant_lag(hip_y - _smooth(hip_y, w=5), fps)
+    lag = dl[0] if (dl and dl[1] > 0.25) else None
+    ic_r = _stance_intervals(_side_ankle_y(lms, det, "R"), pos_t, lag=lag)
+    ic_l = _stance_intervals(_side_ankle_y(lms, det, "L"), pos_t, lag=lag)
+    cycles, base = [], ic_r if len(ic_r) >= len(ic_l) else ic_l
     other = ic_l if base is ic_r else ic_r
     is_r = base is ic_r
+    if len(base) < 2:
+        return [], ic_r, ic_l
     for i in range(len(base) - 1):
         t0, t1 = base[i][0], base[i + 1][0]
         if t1 - t0 <= 0:

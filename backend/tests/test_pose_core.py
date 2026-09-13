@@ -1,7 +1,7 @@
 """
 R-017 P1 pose-core 单测(离线确定性;MediaPipe 推理 monkeypatch 为合成关键点)
-覆盖:AC-1(离线面)步频、质量三门槛、采样降步距、周期不足拒析、几何角度。
-夹具=占空比步态:dwell(触地,踝世界坐标近乎静止)0.45T + 快摆 0.55T,左右腿反相。
+覆盖:AC-1(离线面)步频、质量三门槛、采样降步距、周期不足拒析、几何角度、
+机位无关性(D-3 回归护栏:固定机位横穿 vs 相机跟随,cadence 必须一致)。
 """
 import io
 import math
@@ -118,6 +118,69 @@ class TestAnalyze:
         with pytest.raises(pose.PoseQualityError) as e:
             pose.analyze_video(b"x")
         assert e.value.reason == "no_cycles"
+
+
+# ---- D-3 回归护栏:固定机位横穿 vs 相机跟随,cadence 必须一致 ----
+# 根因复盘:旧 _stance_intervals 用踝世界速度定 stance,仅相机跟随时成立;真实
+# 侧拍固定机位,踝世界 x 全程递增 → 旧法 cadence 实测 54(D-cadence)。
+
+def _traverse_landmarks(t, fps, f_hz, conf, body_move):
+    """单腿 f_hz、反相步态;body_move=True=身体横穿画面(固定机位),False=居中(跟随机位)。
+
+    踝竖直 ay 由步态相位决定(stance贴地/swing上抬),水平 ax 随 body_move 递增。
+    cadence 物理值 = 2 × f_hz × 60,与 body_move 无关。
+    """
+    hipy = 0.42 - 0.03 * abs(math.sin(2 * math.pi * f_hz * t))
+    hipx = (0.25 + 0.12 * t) if body_move else 0.5
+    lm = [(0.5, hipy, 0.0, conf)] * 33
+    lm[11] = (hipx - 0.03, hipy - 0.22, 0.0, conf)
+    lm[12] = (hipx + 0.03, hipy - 0.22, 0.0, conf)
+    lm[23] = (hipx - 0.02, hipy, 0.0, conf)
+    lm[24] = (hipx + 0.02, hipy, 0.0, conf)
+    for side, off in (("L", 0.0), ("R", 0.5)):
+        p = (f_hz * t + off) % 1.0
+        relx = 0.15 - 0.30 * (p / 0.4) if p < 0.4 else -0.15 + 0.30 * ((p - 0.4) / 0.6)
+        lift = 0.0 if p < 0.4 else 0.16 * math.sin(math.pi * (p - 0.4) / 0.6)
+        ax = hipx + relx * 0.6
+        ay = hipy + 0.45 - lift
+        lm[{"L": 27, "R": 28}[side]] = (ax, ay, 0.0, conf)
+        lm[{"L": 25, "R": 26}[side]] = ((hipx + ax) / 2, (hipy + 0.45 + ay) / 2 - 0.01, 0.0, conf)
+    return lm
+
+
+def _patch_traverse(monkeypatch, body_move):
+    import core.pose as pose
+    N, F, FH = 140, 20.0, 1.5
+
+    def fake_sample(data, fps=None, max_frames=None):
+        return ([np.zeros((480, 640, 3), np.uint8) for _ in range(N)],
+                [i / F for i in range(N)], N / F)
+
+    def fake_detect(frames):
+        return [_traverse_landmarks(i / F, F, FH, 0.9, body_move) for i in range(len(frames))]
+
+    monkeypatch.setattr(pose, "sample_frames", fake_sample)
+    monkeypatch.setattr(pose, "_detect_landmarks", fake_detect)
+    return pose, 2 * FH * 60  # 期望 cadence=180
+
+
+class TestCameraInvariance:
+    """AC-1 强化(D-cadence 修复):机位移动不得影响步频。"""
+
+    def test_fixed_camera_traverse_cadence(self, monkeypatch):
+        pose, expect = _patch_traverse(monkeypatch, body_move=True)
+        r = pose.analyze_video(b"x")
+        assert r.metrics["cadence_spm"] == pytest.approx(expect, rel=0.15), \
+            f"固定机位 cadence={r.metrics['cadence_spm']} 期望≈{expect}"
+
+    def test_traverse_equals_follow_cadence(self, monkeypatch):
+        p1, e = _patch_traverse(monkeypatch, body_move=True)
+        c_fixed = p1.analyze_video(b"x").metrics["cadence_spm"]
+        p2, _ = _patch_traverse(monkeypatch, body_move=False)
+        c_follow = p2.analyze_video(b"x").metrics["cadence_spm"]
+        assert c_fixed == pytest.approx(c_follow, rel=0.05), \
+            f"机位无关性违背 fixed={c_fixed} follow={c_follow}"
+
 
 
 class TestSampling:

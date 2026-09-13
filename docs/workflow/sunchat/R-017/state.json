@@ -3,7 +3,7 @@
   "req_id": "R-017",
   "req_type": "feature",
   "title": "跑步姿态分析",
-  "phase": "modules",
+  "phase": "execute",
   "requirements_version": 1,
   "change_count": 0,
   "base_requirements": [
@@ -18,9 +18,63 @@
       "at": "2026-09-13T16:26:18+08:00",
       "confirmed_by": "user",
       "note": "question明示\"确认冻结\";C1~C5闭(D-001~005);gate:requirements FAIL=0"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-13T16:32:06+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认架构\",风险表6项评审通过;补录(会话中已确认,当时漏写state——登记为流程自查项)"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-13T16:32:06+08:00",
+      "confirmed_by": "user",
+      "note": "question整批确认P1~P5接口;design-change+modules入库"
     }
   ],
-  "steps": [],
+  "steps": [
+    {
+      "id": "1",
+      "status": "done",
+      "title": "基线核对",
+      "verified": true
+    },
+    {
+      "id": "2",
+      "status": "in_progress",
+      "title": "依赖与模型预置"
+    },
+    {
+      "id": "3",
+      "status": "pending",
+      "title": "pose-core实现+单测"
+    },
+    {
+      "id": "4",
+      "status": "pending",
+      "title": "pose-skeleton实现+单测"
+    },
+    {
+      "id": "5",
+      "status": "pending",
+      "title": "pose-report实现+单测"
+    },
+    {
+      "id": "6",
+      "status": "pending",
+      "title": "端点+迁移+单测"
+    },
+    {
+      "id": "7",
+      "status": "pending",
+      "title": "前端双端+构建断言"
+    },
+    {
+      "id": "8",
+      "status": "pending",
+      "title": "真机活体验收"
+    }
+  ],
   "clarifications": [
     {
       "id": "C-1",
@@ -104,32 +158,32 @@
     "last_pushed_commit": "6de7d5ef",
     "push_pending": false
   },
-  "updated_at": "2026-09-13T16:31:00+08:00",
+  "updated_at": "2026-09-13T16:32:51+08:00",
   "modules": [
     {
       "id": "P1",
       "name": "pose-core",
-      "design_done": false
+      "design_done": true
     },
     {
       "id": "P2",
       "name": "pose-skeleton",
-      "design_done": false
+      "design_done": true
     },
     {
       "id": "P3",
       "name": "pose-report",
-      "design_done": false
+      "design_done": true
     },
     {
       "id": "P4",
       "name": "pose-api",
-      "design_done": false
+      "design_done": true
     },
     {
       "id": "P5",
       "name": "pose-front",
-      "design_done": false
+      "design_done": true
     }
   ]
 }

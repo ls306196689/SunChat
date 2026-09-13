@@ -11,3 +11,13 @@ GET /m+新包 CWZxY4K1 到达后,**page.enter 诊断与 chat/sessions GET 均未
 候选:①"界面正常"观测其实发生在电脑浏览器(桌面同源可开 /m);②手机页面为旧会话残影。
 处置:中间件 evt=http 增 client IP+UA 字段(对账探针),重启服务,请用户做一轮
 标注设备来源的干净测试(手机新开标签页)。≤2 回合预算内。
+
+D-2 处置第2回合(step-3b 落地):
+UA对账实锤:14:26 iPhone(192.168.1.3, iOS16.1 Safari)拉 /m+css+新JS 全200,之后
+sessions GET/canary 前置版(page.enter)零到达→JS未执行或未初始化。静态体检:esbuild
+safari15 解析OK,toSorted 仅 core-js polyfill 内部非调用面。根因判定需真机一手证据,
+但诊断通道依赖应用JS 自身→部署内联 canary(见 commit 1326e435):canary/js.error/
+js.hung 三态探针,sendBeacon+fetch 双保险。等待真机对账:①canary未到=网络层断(另案);
+②js.error=真因(消息+行列号)即修;③js.hung=应用挂起,查 init 链;
+④page.enter 到+一切正常=此前为旧页残影/缓存路径问题(已被 step-3 治理)。
+预算:本回合为 D-2 第2也是最后调试回合(plan execute §5.4),仍 blocked 则升级 question。

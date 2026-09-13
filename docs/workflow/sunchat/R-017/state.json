@@ -1,0 +1,90 @@
+{
+  "project": "sunchat",
+  "req_id": "R-017",
+  "req_type": "feature",
+  "title": "跑步姿态分析",
+  "phase": "architecture",
+  "requirements_version": 1,
+  "change_count": 0,
+  "base_requirements": [
+    "R-008 chat-image",
+    "R-010 chat-video(附录:A-1帧上限/A-4均匀抽帧)",
+    "R-013 observability(evt规范)",
+    "R-014 mobile-pair(移动端入口)"
+  ],
+  "gates": [
+    {
+      "gate": "requirements_confirmed",
+      "at": "2026-09-13T16:26:18+08:00",
+      "confirmed_by": "user",
+      "note": "question明示\"确认冻结\";C1~C5闭(D-001~005);gate:requirements FAIL=0"
+    }
+  ],
+  "steps": [],
+  "clarifications": [
+    {
+      "id": "C-1",
+      "q": "视频来源:仅侧跑视频自动分析,还是也支持原地/跑步机?拍摄规范校验(侧面/全身入画)做到什么程度?",
+      "status": "closed",
+      "resolution": "双支持(路跑+跑步机),文案分两支 D-001"
+    },
+    {
+      "id": "C-2",
+      "q": "分析模型:MediaPipe Pose 引入为 new dependency;是否同时要求安装视觉模型(当前 Ollama 无 VL)?推荐自动探测降级(无VL时只出数值报告模板)",
+      "status": "closed",
+      "resolution": "VL前置qwen2.5vl:7b+自动探测降级 D-002"
+    },
+    {
+      "id": "C-3",
+      "q": "指标集范围:基础6项(步频/触地腾空比/着地膝角/蹬伸膝角/髋ROM/骨盆侧倾)还是含更多(躯干前倾/垂直振幅/踝背屈)?",
+      "status": "closed",
+      "resolution": "基础7项 D-003"
+    },
+    {
+      "id": "C-4",
+      "q": "入口:UI 形态是新增独立'姿态分析'页/按钮,还是并入现有视频上传(自动识别跑步视频)?推荐显式按钮(分析10~30s需独立态)",
+      "status": "closed",
+      "resolution": "独立按钮 D-004"
+    },
+    {
+      "id": "C-5",
+      "q": "结果持久化:报告仅对话消息,还是存为可回看的分析记录(含骨架帧)?推荐先入对话(复用消息通道),记录表二期",
+      "status": "closed",
+      "resolution": "仅对话消息 D-005"
+    }
+  ],
+  "risks": [
+    {
+      "id": "R-1",
+      "desc": "MediaPipe 与 numpy/opencv 版本冲突(requirements.lock 既有栈)",
+      "level": "med",
+      "status": "open"
+    },
+    {
+      "id": "R-2",
+      "desc": "单视频分析 CPU 10~30s 阻塞;run_in_threadpool+单用户场景可接受,多路并发需队列(暂非目标)",
+      "level": "low",
+      "status": "open"
+    },
+    {
+      "id": "R-3",
+      "desc": "拍摄不规范(正面/抖动机位)导致关键点置信度低→指标失真;需置信度门槛+拒析文案",
+      "level": "med",
+      "status": "open"
+    },
+    {
+      "id": "R-4",
+      "desc": "无 VL 模型时报告端降级路径未定,体验分叉",
+      "level": "low",
+      "status": "open"
+    }
+  ],
+  "repo": {
+    "created": true,
+    "remote": "https://github.com/ls306196689/SunChat.git",
+    "branch": "master",
+    "last_pushed_commit": "6de7d5ef",
+    "push_pending": false
+  },
+  "updated_at": "2026-09-13T16:26:18+08:00"
+}

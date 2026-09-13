@@ -59,7 +59,9 @@ class RequestLogMiddleware:
                     else:
                         lvl, res = logging.INFO, "ok"
                     log_event(_logger, "http", method.lower(), res,
-                              level=lvl, path=path, status=code, ms=ms)
+                              level=lvl, path=path, status=code, ms=ms,
+                              client=(scope.get("client") or ["?"])[0],
+                              ua=headers.get("user-agent", "")[:80])  # R-016 AC-3 设备对账
             await send(message)
 
         try:

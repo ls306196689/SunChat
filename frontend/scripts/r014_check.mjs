@@ -20,8 +20,7 @@ t('test_store_same_origin',
 
 const router = read('../src/router/index.js')
 t('test_router_mobile_route',
-  router.includes("path: '/m'") &&
-  /import MobileView from '\.\.?\/'/.test(router))
+  router.includes("path: '/m'") && router.includes("import MobileView from '../pages/MobileView.vue'"))
 
 const settings = read('../src/pages/SettingsView.vue')
 t('test_settings_pair_qr',

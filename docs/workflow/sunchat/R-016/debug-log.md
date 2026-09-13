@@ -21,3 +21,14 @@ js.hung 三态探针,sendBeacon+fetch 双保险。等待真机对账:①canary�
 ②js.error=真因(消息+行列号)即修;③js.hung=应用挂起,查 init 链;
 ④page.enter 到+一切正常=此前为旧页残影/缓存路径问题(已被 step-3 治理)。
 预算:本回合为 D-2 第2也是最后调试回合(plan execute §5.4),仍 blocked 则升级 question。
+
+D-2 处置第3回合(15:04,入口标记+资源错误上报已部署 index-BfUqk5CD):
+iPhone 新证据链:canary(ver=1.1.0)全到达(网络/post正常);js.error "Script error.@:0:0"
+(page=/,ACAO已上线仍遮蔽);/m 两次仅 canary 即无后续(hung 2.5s 定时器未触发即离开
+页面,或 iOS 后台杀 fetch)。桌面 Firefox 出现 ver=1.0.0 的 canary+完整 entry(挂载
+成功)——旧 HTML 无 no-cache 入缓存的新鲜期证据(Safari 同理)。
+判读装置:main.js import 头 entry.import.ok/挂载 app.mounted(Vue errorHandler→vue.error);
+resource.error(元素级加载失败含文件名);js.hung 附 performance 资源尾部清单。
+下一步:用户 iPhone 关闭全部旧标签 → Safari 设置-清除该网站数据(或用无痕)→
+访问 http://192.168.1.47:8000/m?v=2。预期:①entry.import.ok+app.mounted=修复达成;
+②仅 canary=资源加载层;③js.error 明文=执行期根因。

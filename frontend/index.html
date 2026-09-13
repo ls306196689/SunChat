@@ -32,16 +32,35 @@
           } catch (e) {}
         }
         send('page.canary', 'inline-boot')
+        window.__diagSend = send  // 应用侧可调用(main.js mount 时报 app.mounted;diagError 兜底)
         window.addEventListener('error', function (ev) {
-          send('js.error', (ev.message || 'error') + ' @' +
-            String(ev.filename || '').slice(-40) + ':' + ev.lineno + ':' + ev.colno)
+          if (ev && ev.target && ev.target !== window) {  // 资源加载失败(script/link/img)
+            var t = ev.target
+            send('resource.error', (t.tagName || '?') + ' ' +
+              String(t.src || t.href || '').slice(-80))
+            return
+          }
+          var detail = (ev && ev.error && ev.error.message ? ev.error.message : '') +
+            ((ev && ev.error && ev.error.stack) ? ' ||' + String(ev.error.stack).slice(0, 240) : '')
+          send('js.error',
+            ((ev && ev.message) || 'error') + ' @' +
+            String((ev && ev.filename) || '').slice(-40) + ':' + (ev && ev.lineno) +
+            ':' + (ev && ev.colno) + (detail ? ' | ' + detail : ''))
         }, true)
         window.addEventListener('unhandledrejection', function (ev) {
           var r = ev.reason
           send('js.error', 'unhandledrejection: ' + ((r && r.message) || String(r)).slice(0, 200))
         })
         setTimeout(function () {
-          if (!window.__sunchat_entered) send('js.hung', 'app-not-mounted-in-2500ms')
+          if (!window.__sunchat_entered) {
+            var res = []
+            try {
+              res = performance.getEntriesByType('resource').slice(-10).map(function (e) {
+                return String(e.name).split('/').pop() + (e.responseStatus ? ':' + e.responseStatus : '')
+              })
+            } catch (e) {}
+            send('js.hung', 'app-not-mounted-in-2500ms', { res: res.join(',').slice(0, 300) })
+          }
         }, 2500)
         window.addEventListener('sunchat:entered', function () { sent.enter = true })
       })()

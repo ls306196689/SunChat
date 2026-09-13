@@ -57,6 +57,7 @@ class OllamaService:
         temperature: float = 0.7,
         stream: bool = False,
         model: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> Dict:
         """调用 LLM 对话，返回完整响应 dict（含 eval_count 等用量信息）。"""
         url = f"{self.base_url}/api/chat"
@@ -66,7 +67,7 @@ class OllamaService:
             "temperature": temperature,
             "stream": stream,
         }
-        resp = _post(url, payload)
+        resp = _post(url, payload, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
 

@@ -70,13 +70,14 @@ request.interceptors.response.use(
 export default request
 
 // R-008: 对话图片上传（multipart,不走 JSON 拦截器假设）
-// R-016/FR-4: 不再显式设 Content-Type(axios 对 FormData 自动生成带 boundary 头;
-// 显式无 boundary 头在部分移动 WebView 触发请求不发出——A-3 隐患清零)。
+// R-016/FR-4 修正(422实证):实例默认头为 application/json,上传须显式传
+// {'Content-Type': undefined} 删除它——由浏览器自动生成带 boundary 的 multipart
+// (echo 实验三态:裸→json 422;undefined→正确 boundary;写死字符串→老内核隐患)。
 // R-016/FR-5: 上传 20s 超时(悬挂不再永久"上传中",C2)。
 export function uploadChatImage(file) {
   const form = new FormData()
   form.append('file', file)
-  return request.post('/chat/images', form, { timeout: 20000 })
+  return request.post('/chat/images', form, { headers: { 'Content-Type': undefined }, timeout: 20000 })
 }
 
 // R-008: 图片回显 URL
@@ -88,7 +89,7 @@ export function chatImageUrl(imageId) {
 export function transcribeSpeech(blob) {
   const form = new FormData()
   form.append('file', blob, 'recording.webm')
-  return request.post('/speech/transcribe', form, { timeout: 20000 })
+  return request.post('/speech/transcribe', form, { headers: { 'Content-Type': undefined }, timeout: 20000 })
 }
 
 // R-009: ASR 状态(🎤 可用性)

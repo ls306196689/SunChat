@@ -32,3 +32,17 @@ resource.error(元素级加载失败含文件名);js.hung 附 performance 资源
 下一步:用户 iPhone 关闭全部旧标签 → Safari 设置-清除该网站数据(或用无痕)→
 访问 http://192.168.1.47:8000/m?v=2。预期:①entry.import.ok+app.mounted=修复达成;
 ②仅 canary=资源加载层;③js.error 明文=执行期根因。
+
+D-2 resolved(15:22,真因+修复,E2E全绿):
+真因=[CODE/RUN] frontend/.env(gitignore,不在仓)`VITE_API_URL=http://localhost:8000/api/v1`
+被打进生产包→手机端"localhost"=手机自身→所有业务 API(chat/sessions/images)
+ERR_NETWORK→报"网络问题";diag 通道(index.html canary 硬编码相对路径)却可达——
+完美解释全部现象:GET /m+资源200、canary/entry/mounted(相对)到达、业务 API 零到达。
+R-014"同源化"源码修复被本地 .env 架空(构建期覆盖)。
+并发发现:axios 实例默认头 application/json 污染 FormData 请求(echo 实验:裸上传发出
+application/json→后端422)——删除显式CT 的 step-2 修法反致422,正确修法=
+`{'Content-Type': undefined}` 删除默认头由浏览器生成 boundary(echo 三态实证)。
+修复:①.env 注释掉 VITE_API_URL(dev 走 vite proxy 生产同源)+注释警示;
+②三处上传 header CT:undefined;headless iPhone-UA E2E:上传200/reqId对账/消息4行/
+气泡图1/pageerror=0;r016_check 11/11(断言补 localhost 零出现);真机 ?v=N 待终验。
+教训:环境文件(gitignore)能静默架空代码级修复——验证须检"产物真值"(grep dist)。

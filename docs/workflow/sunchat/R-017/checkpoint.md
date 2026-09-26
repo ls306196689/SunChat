@@ -5,9 +5,9 @@
 - R-017 跑步姿态分析,phase=execute,requirements v2,change_count=1(已确认)
 - 端点 POST /api/v1/chat/video/pose;P1 core/pose.py,P2 pose_skeleton.py,P3 pose_report.py,
   P4 routes/chat.py,P5 前端(均已 v2 化并通过全量测试)
-- git 远端 https://github.com/ls306196689/SunChat.git master;本地最新:
-  5fd7e101(step-3v2)→1a251e6a(step-4,5v2)→8365b142(step-6v2);
-  ⚠这些 commit 尚未 push(下次会话先 push)
+- git 远端 https://github.com/ls306196689/SunChat.git master;最新:
+  5fd7e101(step-3v2)→1a251e6a(step-4,5v2)→8365b142(step-6v2)→cc31204a/61fd2b51(docs);
+  ✅push 已核实同步(2026-09-26 实测 "Everything up-to-date",origin/master=61fd2b51=HEAD)
 
 ## 本轮完成(step-3/4/5/6 v2,全量 pytest 340+1skip 零回归)
 1. pose-core v2:probe_frames(PTS 实测 f_eff/slo∈{2,4,8}且名义≥240/VFR CV>0.35,永不抛)、
@@ -34,6 +34,17 @@
   app.main:app --host 0.0.0.0 --port 8000 >> backend.log 2>&1 < /dev/null'`(已做,health 200)
 
 ## step-8 v2 等用户(唯一剩余)
+- ⛔**前置阻塞 R-11/A-5(2026-09-26 新查证,详见 analysis.md A-5)**:抽帧未应用视频显示
+  旋转元数据→手机竖拍素材进 pipeline 时人体"横躺"(既有真人落盘帧实测肩→髋偏离竖直
+  89.8~92.9°,转正后 2.2~4.0°)。后果:v2 竖直法(cadence/IC/TO)量错轴、body_ratio
+  0.306→0.152(远景易误拒 body_too_small)、pelvic_tilt +1.0°→+91.4°。
+  全仓 rotate/EXIF 处理 0 命中;PyAV to_image 证实不应用 rotate(合成对照)。
+  ⚠另外:落库 cad=48.6 两次(消息247/248,09-13 12:00/14:28)**早于** D-cadence 修复
+  commit 1635e885(09-13 17:44)→ 属旧算法产物,v2 在横躺素材上的行为**至今未活体验证**。
+- 因此实拍对账必须先定顺序(用户门禁):①先导 09-13 原视频 curl 重跑 v2(判据:
+  cad 仍 ~48~55 或拒 body_too_small → A-5 在 v2 成真;cad∈140~220 → 不成立可归档);
+  ②重拍且**横屏锁定再录**(绕开元数据,人体在帧内正立,v2 应直接可用);
+  ③先走 v3 修复(解码处按元数据/人体轴向转正 + rot_applied 透明度键 + 竖幅单测)再实拍。
 - 真人侧跑实拍(手机→/m 或 curl POST)对账:上次 cad=48.6 稀释 bug 已修,本次预期
   cad∈[140,220]+报告透明度行(分析段/裁剪fps/slo)+骨架帧裁剪版回显;身高若要求配速:
   POSE_USER_HEIGHT_CM=175 重启再测

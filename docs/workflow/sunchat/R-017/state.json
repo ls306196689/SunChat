@@ -85,7 +85,8 @@
       "id": "8",
       "status": "in_progress",
       "title": "真机活体验收(v2):真人实拍对账(稀释bug复测)+run-evidence",
-      "verified": false
+      "verified": false,
+      "note": "2026-09-26 续跑:v2 活体拒析链复测通过(bad_magic 1.2ms/low_conf 真推理536ms→400 指引文案),全量 pytest 340+1skip 零回归,push 已同步 origin/master=61fd2b51;但实拍前置核查暴露 R-11/A-5(旋转元数据未应用)→真人实拍对账需 ①用户提供侧跑视频 ②v3 变更门禁决定是否先转正修复。本机无摄像头、无 ffmpeg、外网 raw/hf 不可达,合成素材不能替代真人检出"
     }
   ],
   "clarifications": [
@@ -190,16 +191,23 @@
       "level": "low",
       "status": "open",
       "note": "PTS间隔CV>0.35显式标注置信度降级"
+    },
+    {
+      "id": "R-11",
+      "desc": "抽帧未应用显示旋转元数据,竖拍素材人体横躺:竖直法(cadence/IC)量错轴+body_ratio系统性变小误拒+pelvic_tilt/裁剪/配速失真",
+      "level": "high",
+      "status": "occurred",
+      "note": "step-8 前置核查成真[RUN]:既有真人落盘帧肩→髋偏离竖直89.8/86.7/92.9°,转正后2.2/4.0°;body_ratio 0.152(横躺)→0.306(转正),pelvic_tilt +91.4°→+1.0°;PyAV to_image 不应用 rotate 元数据(合成对照);全仓 rotate/EXIF 处理 0 命中。详见 analysis.md A-5。⚠落库 48.6×2 早于 fix 1635e885(旧算法),不能反证 v2;v2 在横躺素材上的行为尚未活体验证。修复需走 v3 变更(待用户门禁)"
     }
   ],
   "repo": {
     "created": true,
     "remote": "https://github.com/ls306196689/SunChat.git",
     "branch": "master",
-    "last_pushed_commit": "6de7d5ef",
+    "last_pushed_commit": "61fd2b51",
     "push_pending": false
   },
-  "updated_at": "2026-09-14T02:15:00+08:00",
+  "updated_at": "2026-09-26T11:05:00+08:00",
   "modules": [
     {
       "id": "P1",
@@ -247,6 +255,11 @@
       "id": "A-4",
       "status": "confirmed",
       "q": "粗扫采样率账(⚠5fps临界待实装验证)"
+    },
+    {
+      "id": "A-5",
+      "status": "confirmed",
+      "q": "手机视频显示旋转元数据未被应用,人体在帧内横躺→竖直法量错轴(analysis.md A-5,CODE+RUN+REQ+GIT 四维)"
     }
   ],
   "checkpoint": "docs/workflow/sunchat/R-017/checkpoint.md"

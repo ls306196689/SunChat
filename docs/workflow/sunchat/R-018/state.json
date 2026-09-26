@@ -8,7 +8,7 @@
     "R-010 chat-video(core/video.py,仅登记不改动)"
   ],
   "project": "sunchat",
-  "phase": "architecture",
+  "phase": "modules",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -16,6 +16,13 @@
       "confirmed_by": "user",
       "quote": "确认冻结，进入方案设计",
       "note": "question明示冻结;C-1~C3闭(新开R-018/朝向以人体轴为准/身高173cm);gate:requirements FAIL=0;R-010抽帧路同族缺陷按用户决定另立R-019不并入"
+    },
+    {
+      "gate": "architecture_confirmed",
+      "at": "2026-09-26T12:55:00+08:00",
+      "confirmed_by": "user",
+      "quote": "确认架构，进模块设计",
+      "note": "question明示确认;风险表R-1~R-7评审通过(含新增R-6重跑耗时/R-7 quality增键);三决策确认:①np.rot90内存像素转正不用display matrix ②判向不重推理但k≠0重跑粗扫统一坐标系 ③质量阈值不改靠单测钉住;补充口径确认:undetermined与orient=0走完全相同代码路径不新增拒析(FR-6)"
     }
   ],
   "clarifications": [
@@ -180,5 +187,5 @@
     "last_pushed_commit": "61fd2b51",
     "push_pending": false
   },
-  "updated_at": "2026-09-26T12:40:00+08:00"
+  "updated_at": "2026-09-26T12:55:00+08:00"
 }

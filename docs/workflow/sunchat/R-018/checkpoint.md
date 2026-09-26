@@ -60,10 +60,13 @@
    `compliance.sh archive` 两侧 FAIL=0 + 全量摘要入档。**归档前必须 question**。
 
 ## 环境事实(省得再探)
-- 服务本轮**未运行**:`curl :8000/api/v1/health` 返 000。起服务:
-  `cd backend && POSE_USER_HEIGHT_CM=173 setsid --fork bash -c 'exec python -m uvicorn
-  app.main:app --host 0.0.0.0 --port 8000 >> backend.log 2>&1 < /dev/null'`
-  (改码需重启,无 --reload;冷启动首请求 ~30s)
+- 服务**已在跑**(本轮 09-27 启动):`/api/v1/health` = healthy、llm_available=true。
+  改码需重启(无 --reload):`pkill -f "uvicorn app.main"` 然后
+  `cd backend && setsid --fork bash -c 'exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 >> backend.log 2>&1 < /dev/null'`(冷启动首请求 ~30s)
+- **git push 欠账**:`repo.push_pending=true`,本地领先 3 个文档 commit
+  (34d31e46/4634cf89/f23881d2)。⚠`curl https://github.com` 给 200 但 `git push` 走
+  HTTPS 仍 `GnuTLS recv error (-110)`,连续 5 次失败 → 下次会话开场按 git-hub §push
+  重试(敏感自检已过:净内容无内网 IP/凭据,唯一命中在"删除内网 IP"那一行)
 - `backend/.env` 已建(gitignored,`POSE_USER_HEIGHT_CM=173`);局域网访问:手机页 `/m`(本机 IP 用 `hostname -I` 取)
 - 便携 ffmpeg:`/tmp/fftool/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2`;
   ⚠ffmpeg 7 **写不了** rotate 元数据 → 用 `/tmp/mp4matrix.py` 改 tkhd(见 T-5)

@@ -297,9 +297,9 @@
     "created": true,
     "remote": "https://github.com/ls306196689/SunChat.git",
     "branch": "master",
-    "last_pushed_commit": "ec28ae89",
-    "push_pending": true,
-    "push_pending_note": "2026-09-27:本地领先 5 个文档 commit(34d31e46/4634cf89/f23881d2/e616b512 及其后),GnuTLS recv error (-110) 网络层 TLS 中断(本轮 5 次尝试均失败,curl https://github.com 却给 200 → push 通道特有的 TLS 问题)。敏感自检净内容 CLEAN(唯一命中是被删除行的内网 IP,属 skill issue-018 过拦)。下次会话按 git-hub §push 重试"
+    "last_pushed_commit": "63db8f76",
+    "push_pending": false,
+    "push_pending_note": "2026-09-27 已推清(ec28ae89→63db8f76 共 9 commit)。经验:本机 git push 走默认 HTTP/2 会 `GnuTLS recv error (-110)`,加 `-c http.version=HTTP/1.1` 即通 → 下次遇 -110 先切 HTTP/1.1 再判网络;敏感自检净内容 CLEAN(唯一命中是被删除行的内网 IP,属 skill issue-018 过拦)"
   },
   "updated_at": "2026-09-27T00:13:16+08:00"
 }

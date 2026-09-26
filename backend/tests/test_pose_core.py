@@ -4,7 +4,7 @@ R-017 P1 pose-core 单测 v2(离线确定性;MediaPipe 推理 monkeypatch 为合
 质量门槛(no_activity/low_conf/body_too_small)、probe 帧率探测(slo 容器真身,呼应 A-2)、
 段采(FR-10)、机位无关性(D-3 护栏)。
 
-R-018 追加(orient 归一化,判定面):TestOrientation(AC-1 判档/AC-2 正立/AC-3 三分支/AC-4 解耦)。横躺夹具 `_rot_lm` 对**像素域**几何做与 np.rot90 同构的归一化变换;k 方向真值 (4−src_k)%4 已用网格实验钉死。
+R-018 追加(orient 归一化):TestOrientation 判定面(AC-1 判档/AC-2 正立/AC-3 三分支/AC-4 解耦)+ TestPipelineOrient 流水线面。横躺夹具 `_rot_lm` 对**像素域**几何做与 np.rot90 同构的归一化变换(k 方向真值 (4−src_k)%4 已用网格实验钉死);`_patch_orient` 让 fake_detect 按喂入帧是否已被流水线转正决定给正向/旋转几何,杜绝"关键点凭空转正"。
 夹具规范(checkpoint 教训):时间相干(死段零振荡/跑动段按真实时刻起振),
 钉地几何 v5 教训:落点事件轴 land=(2j+side_off)·GAP,同脚跨 2 落点距,连续落点距=GAP。
 """
@@ -520,3 +520,119 @@ class TestOrientation:
             assert forbidden not in src, f"判定源码出现禁用依据: {forbidden}"
         for cmp_ in ("w > h", "h > w", "w>=h", "h>=w"):
             assert cmp_ not in src, f"判定源码出现宽高比比较: {cmp_}"
+
+
+def _patch_orient(monkeypatch, spec, src_k, fake_hw=None, sample_rot=None):
+    """横躺注入:帧始终 fake_hw(默认 480×640 横幅),人在其中被转 src_k 档。
+
+    fake_detect 按**喂进来的帧尺寸**决定给正向还是旋转后的关键点 —— 即流水线里
+    `rotate_frame` 转对了(k 抵消),检测才回正立几何。这保证测的是真坐标系一致性,
+    而不是"关键点凭空转正"(v1 夹具教训)。sample_rot 记录每次采样的 rot 实参。
+    """
+    import core.pose as pose
+    hw = tuple(fake_hw or (480, 640))
+
+    def fake_sample(data, fps=None, max_frames=None, t0=None, t1=None, width=0, rot=0):
+        if sample_rot is not None:
+            sample_rot.append(rot)
+        a = float(t0 or 0.0)
+        b = float(t1) if t1 is not None else spec["dur"]
+        ts, t = [], a
+        while t <= b + 1e-9:
+            ts.append(round(t, 6))
+            t += 1.0 / float(fps or 20.0)
+        if max_frames and len(ts) > max_frames:
+            ts = [ts[j] for j in pose._resample_indices(len(ts), max_frames)]
+        h, w = hw
+        # rot 在采样内生效(与真实 sample_frames 同语义),故 rot 奇数档 → 帧尺寸交换
+        frames = [pose.rotate_frame(np.zeros((h, w, 3), dtype=np.uint8), rot) for _ in ts]
+        return frames, ts, spec["dur"]
+
+    def fake_detect(frames, ts=None):
+        if ts is None:
+            ts = [i / 20.0 for i in range(len(frames))]
+        out = []
+        for f, t in zip(frames, ts):
+            lm = _gait(float(t), spec["f_hz"], spec["conf"], spec["body"],
+                       spec["run_start"], spec.get("hip_x"), spec.get("gap"))
+            # 帧被转过(尺寸交换)→ 人已正立,给正向关键点;否则给旋转后的几何
+            upright = (f.shape[0], f.shape[1]) != hw
+            out.append(lm if upright else _rot_lm(lm, src_k))
+        return out
+
+    monkeypatch.setattr(pose, "sample_frames", fake_sample)
+    monkeypatch.setattr(pose, "_detect_landmarks", fake_detect)
+    monkeypatch.setattr(pose, "probe_frames", lambda d: {
+        "fps_eff": 25.0, "fps_nominal": 25.0, "slo_factor": 1, "vfr": False,
+        "duration": spec["dur"]})
+    return pose
+
+
+class TestPipelineOrient:
+    """R-018 流水线面:横躺/倒立端到端(AC-1 指标、AC-2 逐值、AC-3 不拒、FR-4、FR-7)。"""
+
+    def test_upright_zero_change(self, monkeypatch):
+        """AC-2:正立夹具在 orient 开/关下指标逐值不变(quality 除增键外一致)。"""
+        from app.config import settings
+        spec = _mk()
+        monkeypatch.setattr(settings, "POSE_ORIENT_ENABLED", False)
+        base = _patch(monkeypatch, spec).analyze_video(b"x")
+        monkeypatch.setattr(settings, "POSE_ORIENT_ENABLED", True)
+        r = _patch(monkeypatch, spec).analyze_video(b"x")
+        assert r.quality["orient"] == "0" and r.orient["rot_k"] == 0
+        assert r.metrics == base.metrics
+        q1, q2 = dict(base.quality), dict(r.quality)
+        o2, c2 = q2.pop("orient"), q2.pop("orient_conf")
+        q1.pop("orient", None)
+        q1.pop("orient_conf", None)
+        assert q1 == q2 and o2 == "0" and c2 >= 0.6
+
+    def test_head_right_recovers_cadence(self, monkeypatch):
+        """AC-1:头朝右上传 → 判 90cw 转正,cad 回正立真值 ±5%;密采带同 k。"""
+        import core.pose as pose
+        spec = _mk()
+        upright = _patch(monkeypatch, spec).analyze_video(b"x")
+        monkeypatch.undo()
+        rot_calls = []
+        _patch_orient(monkeypatch, spec, src_k=3, sample_rot=rot_calls)
+        r = pose.analyze_video(b"x")
+        assert r.orient["orient"] == "90cw" and r.orient["rot_k"] == 1
+        assert r.quality["orient"] == "90cw"
+        assert r.metrics["cadence_spm"] == pytest.approx(
+            upright.metrics["cadence_spm"], rel=0.05)
+        # 粗扫 rot=0(判向用原图),密采 rot=1(FR-4 同 k)
+        assert rot_calls[0] == 0 and 1 in rot_calls
+
+    def test_head_down_180_recovers(self, monkeypatch):
+        """头朝下(180°)→ 判 "180" 转正,cad 回真值。"""
+        import core.pose as pose
+        spec = _mk()
+        upright = _patch(monkeypatch, spec).analyze_video(b"x")
+        monkeypatch.undo()
+        _patch_orient(monkeypatch, spec, src_k=2)
+        r = pose.analyze_video(b"x")
+        assert r.orient["orient"] == "180" and r.orient["rot_k"] == 2
+        assert r.metrics["cadence_spm"] == pytest.approx(
+            upright.metrics["cadence_spm"], rel=0.05)
+
+    def test_undetermined_not_rejected(self, monkeypatch):
+        """AC-3/FR-6:判定向导结果 → 不转、指标照常输出,无新增拒析,orient 如实呈现。"""
+        import core.pose as pose
+        monkeypatch.setattr(pose, "detect_orientation", lambda lms, hw: {
+            "orient": "undetermined", "orient_conf": 0.0, "orient_samples": 0,
+            "orient_abstain": 7, "rot_k": 0})
+        res = _patch(monkeypatch, _mk()).analyze_video(b"x")   # 夹具本身正立可分析
+        assert res.quality["orient"] == "undetermined" and res.orient["rot_k"] == 0
+        assert res.metrics["cadence_spm"] == pytest.approx(180.0, rel=0.05)
+
+    def test_horizontal_body_ratio_restored(self, monkeypatch):
+        """FR-7:横躺转正后 body_ratio 回到正立尺度(不在被压低值上判 0.12 门槛)。"""
+        import core.pose as pose
+        spec = _mk()
+        upright = _patch(monkeypatch, spec).analyze_video(b"x")
+        monkeypatch.undo()
+        _patch_orient(monkeypatch, spec, src_k=1)
+        r = pose.analyze_video(b"x")
+        assert r.quality["body_ratio"] == pytest.approx(
+            upright.quality["body_ratio"], abs=0.02)
+        assert r.quality["body_ratio"] > 0.12

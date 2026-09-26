@@ -42,6 +42,7 @@ class PoseResult:
     sample_ts: list
     video_duration: float
     crop_bbox: Optional[Tuple[float, float, float, float]] = None  # FR-12 归一化 xyxy,None=整帧
+    orient: dict = field(default_factory=dict)  # R-018 FR-5:detect_orientation 结论(含 rot_k)
 
 
 class PoseQualityError(Exception):
@@ -699,6 +700,18 @@ def analyze_video(data: bytes, *, max_sample_frames: Optional[int] = None) -> Po
     if not frames_c:
         raise PoseQualityError("no_cycles", "未能解出任何帧")
     lms_c = _detect_landmarks(frames_c, ts_c)
+
+    # ---- R-018 朝向归一化(FR-1/3/4/7):在原始像素的一次检出上判向,判后统一坐标系 ----
+    orient = detect_orientation(lms_c, (frames_c[0].shape[0], frames_c[0].shape[1])) \
+        if settings.POSE_ORIENT_ENABLED else \
+        {"orient": "off", "orient_conf": 0.0, "orient_samples": 0,
+         "orient_abstain": 0, "rot_k": 0}
+    rot_k = _norm_rot(orient.get("rot_k", 0))
+    if rot_k:
+        # 转正后重跑粗扫关键点:body_ratio / locate_activity 的 y 轴 / crop_bbox 全部
+        # 落在"头朝上"坐标系(A-3:横躺时 body_ratio 0.152 逼近误拒线、踝振荡轴 y→x)
+        frames_c = [rotate_frame(f, rot_k) for f in frames_c]
+        lms_c = _detect_landmarks(frames_c, ts_c)
     det_c = [i for i, l in enumerate(lms_c) if l]
 
     coverage = len(det_c) / len(lms_c)
@@ -724,8 +737,11 @@ def analyze_video(data: bytes, *, max_sample_frames: Optional[int] = None) -> Po
     groups, ld_all, ts_all = [], [], []
     last_hw = (frames_c[0].shape[0], frames_c[0].shape[1])
     conf_d = []
+    # 密采与判定同 k(FR-4)。k=0 时不带 rot 参数:v2 注入面(单测 monkeypatch)签名不变
+    den_kw = {"rot": rot_k} if rot_k else {}
     for a, b, _e in segs:
-        fd, tsd, _ = sample_frames(data, fps=den_fps, max_frames=per_seg_budget, t0=a, t1=b)
+        fd, tsd, _ = sample_frames(data, fps=den_fps, max_frames=per_seg_budget,
+                                   t0=a, t1=b, **den_kw)
         if not fd:
             continue
         last_hw = (fd[0].shape[0], fd[0].shape[1])
@@ -780,8 +796,10 @@ def analyze_video(data: bytes, *, max_sample_frames: Optional[int] = None) -> Po
                "score": round(mean_conf * 0.7 + min(body_ratio / 0.3, 1.0) * 0.3, 3),
                "fps_eff": probe["fps_eff"], "fps_nominal": probe["fps_nominal"],
                "slo_factor": slo, "vfr": probe["vfr"],
-               "activity_span": round(total_seg, 2)}
+               "activity_span": round(total_seg, 2),
+               "orient": orient.get("orient", ORIENT_UNDET),          # R-018 FR-5
+               "orient_conf": orient.get("orient_conf", 0.0)}
     return PoseResult(metrics=metrics, quality=quality, cycles=all_cycles,
                       landmarks_seq=ld_all, sample_ts=ts_all,
                       video_duration=round(dur or probe["duration"], 3),
-                      crop_bbox=crop)
+                      crop_bbox=crop, orient=orient)

@@ -61,3 +61,27 @@ R-017 归档时该风险本就未闭合,建议归档记录里点名,或另立 R-
 
 ## T-6 【skill issue-009】用户已选"暂不处理"
 compliance.sh 从 skill 目录运行时路径误报 + change/micro 节点缺登记,保持现状。
+
+## T-7 【范围外发现,建议另立 micro 需求】启动期 storage reconcile 成功日志必抛 TypeError
+现场(本轮重启后端时 backend.log 实录):
+```
+TypeError: log_event() got multiple values for argument 'result'
+```
+根因(`backend/app/main.py:65`,与 R-018 无关,属既有缺陷):
+```python
+log_event(logger, "storage", "reconcile", "ok", result=str(r)[:120], pruned=p)
+#       ^log     ^domain     ^action      ^result(位置参)  ↑又给了一次 result= 关键字 → 双值冲突
+```
+签名是 `log_event(log, domain, action, result, exc=False, level=None, **fields)`
+(`backend/utils/logger.py:167`)。
+
+**影响面(已核实,不扩大)**:`reconcile()` / `prune_orphan_vectors()` /
+`fts_bootstrap_from_sqlite()` 都在该行**之前已执行完成**,异常被外层 `except` 捕获,
+服务照常 `Application startup complete` → **功能无损,但每次启动都把"成功"记成
+fail + 误导性 error + 堆栈**,污染启动日志、掩盖真故障。修法一行:
+把 `result=str(r)[:120]` 改成 `stat=str(r)[:120]`(或删掉该 kw)并加一条
+"启动成功路径不抛"的回归单测。
+
+**为什么没在本需求里顺手改**:改 `app/main.py` 属改变代码行为,req-dev 硬规则 3
+要求任何逻辑改动必须先立需求与方案文档;R-018 的范围是抽帧朝向归一化,夹带会让
+回归面与验收判据失真。建议按 micro 快速通道立项(1 文件 + 1 单测)。

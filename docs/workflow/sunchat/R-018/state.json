@@ -148,7 +148,7 @@
       "goal": "真人实拍对账(横屏+竖屏,身高173cm)与 R-017 step-8 合并执行",
       "module": "端到端",
       "status": "blocked",
-      "blocked_reason": "需用户手机实拍素材:本机无摄像头;公版素材站(mixkit 403/archive+commons 超时/pexels 404)不可取;合成剪影过不了 coverage<0.6 且 cadence 不可对账(step-4c §四)。执行细则见 todo.md T-1(上传路径=手机页 http://<本机IP>:5173/m(IP 用 hostname -I 取)或 curl 端点)",
+      "blocked_reason": "需用户手机实拍素材(本机无摄像头;mixkit 403/archive.org+commons 超时/pexels 404,pandamation 走 Google Drive 不通;合成剪影过不了 coverage 门槛且 cadence 严重高估)。恢复路径已就绪并入库:cd backend && python scripts/pose_live_capture.py --file x.mp4 --label 横屏 --session-id 82(横/竖屏各一次,自动按 AC-6 打 PASS/FAIL + 机读 JSON + 报告原文,--strict 退 1;judge() 有 8 例单测;拒析路已冒烟验证)。细则见 todo.md T-1;结果写 run-evidence/live-reconcile.md 并回写 R-017/step-8。",
       "context": [
         "R-017/plan.md",
         "R-018/requirements.md",
@@ -297,9 +297,9 @@
     "created": true,
     "remote": "https://github.com/ls306196689/SunChat.git",
     "branch": "master",
-    "last_pushed_commit": "63db8f76",
+    "last_pushed_commit": "e7bd6010",
     "push_pending": false,
-    "push_pending_note": "2026-09-27 已推清(ec28ae89→63db8f76 共 9 commit)。经验:本机 git push 走默认 HTTP/2 会 `GnuTLS recv error (-110)`,加 `-c http.version=HTTP/1.1` 即通 → 下次遇 -110 先切 HTTP/1.1 再判网络;敏感自检净内容 CLEAN(唯一命中是被删除行的内网 IP,属 skill issue-018 过拦)"
+    "push_pending_note": "2026-09-27 已推清至 e7bd6010(本轮 4 commit:INDEX 抬头更正 / step-5 取证脚本+单测 / todo+checkpoint 交接)。⚠注意:本机 master 未设 upstream,`git diff @{u}...HEAD` 会 fatal 并使敏感自检空跑成假 CLEAN → 自检与范围核对一律用显式 `origin/master..HEAD`(先 git fetch)。push 仍需 -c http.version=HTTP/1.1。"
   },
-  "updated_at": "2026-09-27T00:13:16+08:00"
+  "updated_at": "2026-09-27T05:08:10+08:00"
 }

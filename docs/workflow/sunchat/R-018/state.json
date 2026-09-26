@@ -1,0 +1,55 @@
+{
+  "req_id": "R-018",
+  "req_type": "bugfix",
+  "base_requirements": ["R-017 pose-core(P1)", "R-017 pose-report(P3)", "R-017 pose-api(P4)", "R-010 chat-video(core/video.py,仅登记不改动)"],
+  "project": "sunchat",
+  "phase": "requirements",
+  "gates": [],
+  "clarifications": [
+    {
+      "id": "C-1",
+      "question": "R-017 step-8 实拍前置核查暴露 R-11(旋转元数据未应用),是走 R-017 v3 变更还是新开需求?",
+      "resolution": "用户选『新开 R-018(推荐)』——影响 4 个已完成步骤触发熔断,不在 R-017 内继续塞变更",
+      "status": "closed"
+    },
+    {
+      "id": "C-2",
+      "question": "朝向判定依据:横屏/竖屏(画面宽高比)、容器 rotate 元数据、还是人体自身朝向?",
+      "resolution": "用户明示『横屏竖屏不能作为旋转依据。要识别人的朝向。以人头上脚下为基准来控制旋转』→ FR-1/FR-2 以人体头脚轴为唯一依据,禁止元数据与宽高比",
+      "status": "closed"
+    },
+    {
+      "id": "C-3",
+      "question": "配速是否本轮出数(需准确身高,腿长=身高×0.53,R-8 身高级联失真)",
+      "resolution": "用户答『要,我给身高』并给 173cm → POSE_USER_HEIGHT_CM=173,实拍对账时配速一并验收",
+      "status": "closed"
+    }
+  ],
+  "modules": [
+    {"name": "pose-core(P1,朝向判定+转正)", "design_doc": null, "design_done": false},
+    {"name": "pose-skeleton(P2,转正坐标系绘制)", "design_doc": null, "design_done": false},
+    {"name": "pose-report(P3,透明度行)", "design_doc": null, "design_done": false},
+    {"name": "pose-api(P4,quality/evt 透传)", "design_doc": null, "design_done": false}
+  ],
+  "steps": [],
+  "analyses": [
+    {"id": "A-1", "topic": "抽帧不应用显示旋转元数据(含 PyAV 合成对照)", "conclusion": "喂给 MediaPipe 的像素朝向=码流朝向,无归一化", "evidence_count": 2, "status": "confirmed"},
+    {"id": "A-2", "topic": "真人素材人体在帧内横躺", "conclusion": "肩→髋偏离竖直 89.8~92.9°,bbox 高/宽 0.28;VL 与 rot90 复核一致", "evidence_count": 2, "status": "confirmed"},
+    {"id": "A-3", "topic": "横躺打掉竖直法并污染门槛/配速", "conclusion": "踝真振荡轴 y→x;body_ratio 0.306→0.152 误拒风险;pelvic_tilt +1.0°→+91.4°", "evidence_count": 3, "status": "confirmed"},
+    {"id": "A-4", "topic": "四向试探取可检出者会选错(设计关键约束)", "conclusion": "真 upright 在生产门槛 0.5 检不出(需 0.15,vis 0.70);错误朝向也能检出并给反向几何 → 禁用『能否检出』作判据", "evidence_count": 2, "status": "confirmed"},
+    {"id": "A-5", "topic": "人身向量估算法可行(实现依据)", "conclusion": "u=单位化(肩中点−髋中点)+鼻符号消 180°;4 横躺帧一致判顺90°,正立帧判 0°;裕度 ±10°", "evidence_count": 2, "status": "confirmed"},
+    {"id": "A-6", "topic": "与既有结论边界", "conclusion": "R-017 A-1/A-2/A-3 不受影响;落库 48.6 早于 fix 1635e885 属旧算法,不能反证 v2", "evidence_count": 3, "status": "confirmed"}
+  ],
+  "requirements_version": 1,
+  "change_count": 0,
+  "escalated_from_micro": false,
+  "risks": [
+    {"id": "R-1", "desc": "关键点肩/髋左右误配或遮挡致 u 向量不稳", "prob": "中", "impact": "中", "mitigation": "中点法对左右互换不敏感;多帧投票+一致度门槛;不可定则不转", "status": "open"},
+    {"id": "R-2", "desc": "非90°档(斜握20~30°)量化后残余倾斜", "prob": "中", "impact": "低", "mitigation": "竖直法去趋势吸收小幅倾斜;透明度声明残余误差", "status": "open"},
+    {"id": "R-3", "desc": "转正改变 body_ratio/crop 语义,既有阈值需复核", "prob": "中", "impact": "中", "mitigation": "实测转正后 body_ratio=0.306(门槛0.12裕度足);阈值不改,单测锁定", "status": "open"},
+    {"id": "R-4", "desc": "R-010 视频对话抽帧路(core/video.py)同族不归一化遗留", "prob": "高", "impact": "中", "mitigation": "本需求显式排除,INDEX 台账提示,建议另立需求;波及全部视频对话不宜夹带", "status": "open"},
+    {"id": "R-5", "desc": "竖屏转正后 720x1280 骨架帧变大", "prob": "低", "impact": "低", "mitigation": "沿用 JPEG q85 落盘;必要时另需求调压缩", "status": "open"}
+  ],
+  "repo": {"created": true, "remote": "https://github.com/ls306196689/SunChat.git", "branch": "master", "last_pushed_commit": "61fd2b51", "push_pending": false},
+  "updated_at": "2026-09-26T11:40:00+08:00"
+}

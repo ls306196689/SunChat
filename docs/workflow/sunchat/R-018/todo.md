@@ -85,26 +85,3 @@ fail + 误导性 error + 堆栈**,污染启动日志、掩盖真故障。修法�
 **为什么没在本需求里顺手改**:改 `app/main.py` 属改变代码行为,req-dev 硬规则 3
 要求任何逻辑改动必须先立需求与方案文档;R-018 的范围是抽帧朝向归一化,夹带会让
 回归面与验收判据失真。建议按 micro 快速通道立项(1 文件 + 1 单测)。
-
-## T-7 【范围外发现,建议另立 micro 需求】启动期 storage reconcile 成功日志必抛 TypeError
-现场(本轮重启后端 backend.log 实录,服务仍 `Application startup complete`):
-```
-TypeError: log_event() got multiple values for argument 'result'
-```
-根因(`backend/app/main.py:65`,与 R-018 无关的既有缺陷):
-```python
-log_event(logger, "storage", "reconcile", "ok", result=str(r)[:120], pruned=p)
-#       ^log     ^domain    ^action     ^result(第4个位置参) ↑又给一次 result= 关键字 → 双值冲突
-```
-签名:`log_event(log, domain, action, result, exc=False, level=None, **fields)`
-(`backend/utils/logger.py:167`)。
-
-**影响面(已核实,不外推)**:`reconcile()` / `prune_orphan_vectors()` /
-`fts_bootstrap_from_sqlite()` 均在该行**之前已执行完成**,异常被外层 `except` 捕获,
-服务照常启动 → **功能无损**;但每次启动都把"成功"记成 `result=fail` + 误导性
-error + 堆栈,污染启动日志、掩盖真故障。修法一行:`result=` 改 `stat=`(或删该 kw),
-并补一条"启动成功路径不抛"的回归单测。
-
-**为什么不在本需求里顺手改**:改 `app/main.py` 属改变代码行为,req-dev 硬规则 3
-要求逻辑改动先立需求与方案文档;R-018 的验收判据是朝向归一化,夹带会让回归面失真。
-建议走 micro 快速通道(1 文件 + 1 单测)。

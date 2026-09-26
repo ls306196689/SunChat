@@ -14,8 +14,14 @@ Google Drive,本机网络不通;④合成剪影素材过不了 `coverage<0.6` �
   通过手机页面上传:手机页 `http://<本机局域网IP>:5173/m`(会话内直接发视频;
   本机 IP 用 `hostname -I` 取,当前值见本机 shell 输出,不写进文档),
   或把文件放到本机任意路径告诉我;
-- 或直接给文件路径,我用接口跑:
-  `curl -X POST http://localhost:8000/api/v1/chat/video/pose -F file=@x.mp4 -F session_id=21`
+- 或直接给文件路径,我用**已入库的取证脚本**跑(会按 AC-6 逐项打 PASS/FAIL + 机读 JSON):
+  ```bash
+  cd backend && python scripts/pose_live_capture.py \
+      --file /path/横屏.mp4 --label 横屏 --session-id 82
+  # 竖屏同命令换 --file/--label;两段都跑完即可直接抄成 run-evidence/live-reconcile.md
+  ```
+  (脚本判定逻辑有单测 `tests/test_pose_live_capture_script.py`,8 例;
+  等价裸命令:`curl -X POST http://localhost:8000/api/v1/chat/video/pose -F file=@x.mp4 -F session_id=82`)
 
 **判据(AC-6)**:两段均 `orient` 非 undetermined(横屏一段应为 90cw/270cw 之一)、
 `cadence_spm ∈ [140,220]`、报告打印"画面已按人体朝向转正(头朝上,原为 …)"、

@@ -25,8 +25,9 @@
 - **`_pace` 零改动**(decisions D-6:v2 写法本就是真像素距,横竖帧皆正确)
 
 ## 测试基线(全绿)
-- `cd backend && python -m pytest tests -q` → **367 passed, 1 skipped**(~14.5s)
-  (R-017 基线 340+1skip,+27 条:pose_core 19 / pose_report 4 / pose_api 4)
+- `cd backend && python -m pytest tests -q` → **375 passed, 1 skipped**(~15s)
+  (R-017 基线 340+1skip,+35 条:pose_core 19 / pose_report 4 / pose_api 4 /
+  pose_live_capture 脚本判定 8)
 - AC-1/2/3/4/5/7 单测覆盖;**AC-3 文案 + AC-5 含"忘传 rot 必失败"负例**(32×16 横 vs 16×32 竖)
 - 夹具:`_rot_lm`(与 np.rot90 逐像素/归一化同构)、`_patch_orient`(fake_detect 按喂入帧
   是否已转正决定给正向/旋转关键点——杜绝"关键点凭空转正")。k 方向真值 = (4−src_k)%4
@@ -51,8 +52,11 @@
 
 ## 未完成 = 两条,都要用户
 1. **step-5(blocked)**:手机侧跑实拍**横屏+竖屏各一段** →
-   上传手机页(`http://<本机局域网IP>:5173/m`,IP 用 `hostname -I` 取),或 `curl -X POST localhost:8000/api/v1/chat/video/pose
-   -F file=@x.mp4 -F session_id=21`。身高 173cm 已在 `backend/.env`。
+   上传手机页(`http://<本机局域网IP>:5173/m`,IP 用 `hostname -I` 取),或用**已入库取证脚本**:
+   `cd backend && python scripts/pose_live_capture.py --file x.mp4 --label 横屏 --session-id 82`
+   (自动按 AC-6 打 PASS/FAIL + 机读 JSON + 报告原文;`--strict` 失败退 1;
+   判定逻辑有单测 8 例,拒析路已用合成素材冒烟验证过 HTTP 400 上报形态)。
+   身高 173cm 已在 `backend/.env`。
    判据 AC-6:orient 非 undetermined、cad∈[140,220]、报告含"已按人体朝向转正"、
    骨架帧人正立、配速出数(±20% 级)。结果写 `run-evidence/live-reconcile.md`
    并回写 **R-017/step-8**(解除其 blocked)。

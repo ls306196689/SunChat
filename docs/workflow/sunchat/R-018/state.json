@@ -8,7 +8,7 @@
     "R-010 chat-video(core/video.py,仅登记不改动)"
   ],
   "project": "sunchat",
-  "phase": "modules",
+  "phase": "execute",
   "gates": [
     {
       "gate": "requirements_confirmed",
@@ -23,6 +23,22 @@
       "confirmed_by": "user",
       "quote": "确认架构，进模块设计",
       "note": "question明示确认;风险表R-1~R-7评审通过(含新增R-6重跑耗时/R-7 quality增键);三决策确认:①np.rot90内存像素转正不用display matrix ②判向不重推理但k≠0重跑粗扫统一坐标系 ③质量阈值不改靠单测钉住;补充口径确认:undetermined与orient=0走完全相同代码路径不新增拒析(FR-6)"
+    },
+    {
+      "gate": "design_confirmed",
+      "at": "2026-09-26T18:17:49+08:00",
+      "confirmed_by": "blanket",
+      "quote": "后续都按照最优方案执行,我全部授权",
+      "scope": "R-018",
+      "note": "blanket 门禁(MUST 规则4总授权例外,requirements/归档除外);四模块 r1 定稿:P1 detect_orientation 纯函数+sample_frames rot+流水线插入(粗扫重跑统一坐标系),P2 零改动仅登记同-k 契约,P3 transparency_lines 三态文案(正立不打印保 AC-7 逐值不变),P4 _frames_at_ts(rot=k)+evt orient 字段;AC→模块映射齐;gate:design FAIL=0"
+    },
+    {
+      "gate": "plan_confirmed",
+      "at": "2026-09-26T18:21:45+08:00",
+      "confirmed_by": "blanket",
+      "quote": "后续都按照最优方案执行,我全部授权",
+      "scope": "R-018",
+      "note": "blanket 门禁(总授权例外);plan.md 6 步(1 纯函数+config+rot 参数 / 2 流水线插入+粗扫重跑 / 3 P4 同-k 取帧+P3 透明度行 / 4 全量+带元数据活体冒烟 / 5 真人横竖屏实拍与 R-017 step-8 合并 / 6 归档+基线回写);AC-1~7 全覆盖,gate:plan FAIL=0;step-5 单测豁免已声明理由(无摄像头+外网受限),step-6 纯文档豁免"
     }
   ],
   "clarifications": [
@@ -48,26 +64,92 @@
   "modules": [
     {
       "name": "pose-core(P1,朝向判定+转正)",
-      "design_doc": null,
-      "design_done": false
+      "design_doc": "docs/workflow/sunchat/R-018/modules/pose-core.md",
+      "design_done": true
     },
     {
       "name": "pose-skeleton(P2,转正坐标系绘制)",
-      "design_doc": null,
-      "design_done": false
+      "design_doc": "docs/workflow/sunchat/R-018/modules/pose-skeleton.md",
+      "design_done": true
     },
     {
       "name": "pose-report(P3,透明度行)",
-      "design_doc": null,
-      "design_done": false
+      "design_doc": "docs/workflow/sunchat/R-018/modules/pose-report.md",
+      "design_done": true
     },
     {
       "name": "pose-api(P4,quality/evt 透传)",
-      "design_doc": null,
-      "design_done": false
+      "design_doc": "docs/workflow/sunchat/R-018/modules/pose-api.md",
+      "design_done": true
     }
   ],
-  "steps": [],
+  "steps": [
+    {
+      "id": "1",
+      "goal": "detect_orientation 纯函数 + POSE_ORIENT_* 三参 + sample_frames(rot=)",
+      "module": "pose-core/config",
+      "status": "pending",
+      "context": [
+        "R-018/modules/pose-core.md",
+        "backend/core/pose.py",
+        "backend/app/config.py",
+        "backend/tests/test_pose_core.py"
+      ]
+    },
+    {
+      "id": "2",
+      "goal": "analyze_video 插入判向+粗扫重跑+转正系门槛+orient 字段/quality 增键",
+      "module": "pose-core",
+      "status": "pending",
+      "context": [
+        "R-018/modules/pose-core.md",
+        "R-018/design-change.md",
+        "backend/core/pose.py"
+      ]
+    },
+    {
+      "id": "3",
+      "goal": "P4 _frames_at_ts(rot=k)+evt orient 字段;P3 透明度行三态文案",
+      "module": "routes/chat.py+pose_report.py",
+      "status": "pending",
+      "context": [
+        "R-018/modules/pose-api.md",
+        "R-018/modules/pose-report.md",
+        "backend/app/api/v1/routes/chat.py",
+        "backend/core/pose_report.py"
+      ]
+    },
+    {
+      "id": "4",
+      "goal": "全量回归 340+1skip + 带 rotate 元数据合成 mp4 活体冒烟(AC-4 活体面)",
+      "module": "全部",
+      "status": "pending",
+      "context": [
+        "R-018/design-change.md"
+      ]
+    },
+    {
+      "id": "5",
+      "goal": "真人实拍对账(横屏+竖屏,身高173cm)与 R-017 step-8 合并执行",
+      "module": "端到端",
+      "status": "pending",
+      "context": [
+        "R-017/plan.md",
+        "R-018/requirements.md"
+      ]
+    },
+    {
+      "id": "6",
+      "goal": "归档准备:基线回写 + R-017/R-018 验收总结(归档节点单独 question)",
+      "module": "文档",
+      "status": "pending",
+      "context": [
+        "docs/workflow/sunchat/design/",
+        "baseline.md",
+        "INDEX.md"
+      ]
+    }
+  ],
   "analyses": [
     {
       "id": "A-1",
@@ -187,5 +269,5 @@
     "last_pushed_commit": "61fd2b51",
     "push_pending": false
   },
-  "updated_at": "2026-09-26T12:55:00+08:00"
+  "updated_at": "2026-09-26T18:21:45+08:00"
 }

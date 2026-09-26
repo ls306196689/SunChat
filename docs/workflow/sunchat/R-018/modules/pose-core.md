@@ -7,6 +7,7 @@
 | 版本 | 日期 | 变更 | 触发 |
 |---|---|---|---|
 | r1 | 2026-09-26 | 新增 detect_orientation;sample_frames 增 rot;analyze_video 插入判向环节;PoseResult/quality 增键 | FR-1/2/3/4/7 |
+| r1.1 | 2026-09-26 | **澄清(非语义变更)**:角度计算必须在**像素域**(u 向量 x×W、y×H 后再单位化)。签名里的 `frame_hw` 就是为此存在 | decisions.md D-1 |
 
 ## 对外接口
 
@@ -19,8 +20,9 @@ def detect_orientation(lms: list, frame_hw: tuple[int, int]) -> dict:
 
     返回 dict:
       orient:         "0" | "90cw" | "180" | "270cw" | "undetermined"
-      orient_conf:    float 0~1(多数票占比;未定=0.0)
-      orient_samples: int    参与投票帧数(有效帧)
+      orient_conf:    float 0~1(多数票占比;**低一致度的 undetermined 也如实回显占比**,
+                      样本不足/全弃权时为 0.0)
+      orient_samples: int    参与投票帧数(有效帧;**全分支如实计数**,含样本不足分支)
       orient_abstain: int    因落量化边界带弃权的帧数
       rot_k:          int 0..3,喂给 np.rot90 / sample_frames 的转正档(未定=0)
 

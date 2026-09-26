@@ -137,16 +137,22 @@
         "R-018/design-change.md"
       ],
       "finished_at": "2026-09-27T00:13:16+08:00",
-      "evidence": "run-evidence/step4-regression-and-smoke.md:367 passed 1 skipped(AC-7 零回归,既有用例一字未改);真人 AC-4 活体面=判定只随人体朝向变(横幅判270cw/同内容竖幅不偷判0/238-A竖屏判0);rotate=90 元数据变体本机 ffmpeg7 写入被丢弃→标注未执行,由 grep 禁读+A-1 等效钉死;FR-7 活体 body_ratio .256→.271;k≠0 重跑耗时端点 ms≈580 无劣化(R-6)"
+      "evidence": "run-evidence/step4-regression-and-smoke.md:367 passed 1 skipped(AC-7 零回归,既有用例一字未改);真人 AC-4 活体面=判定只随人体朝向变(横幅判270cw/同内容竖幅不偷判0/238-A竖屏判0);rotate=90 元数据变体本机 ffmpeg7 写入被丢弃→当时标注未执行,后由 step-4b 补做完成;FR-7 活体 body_ratio .256→.271;k≠0 重跑耗时端点 ms≈580 无劣化(R-6)",
+      "supplementary_evidence": [
+        "run-evidence/step4b-ac4-metadata-variant.md(补 step-4 标注未执行的『带 rotate 元数据 vs 不带』活体对照:直改 tkhd matrix box 造手机竖拍同款元数据并经 PyAV 反读证实 DISPLAYMATRIX 存在;真人内容在无/顺90/顺270/180 四种显示矩阵下 orient 与 rot_k 逐值一致。§四 决定性宽高比对照:真人正立 238-A 竖幅→加黑列变横幅,两口径仍 orient=0/rot_k=0/检出4/4,宽高比启发式必然转掉它而实现未转)",
+        "run-evidence/step4c-real-inference-equivalence.md(真实 MediaPipe 推理下跑通判向→转正→重跑粗扫→密采同 k:横躺20/20检出判270cw/k=3 conf1.0;FR-7 唯一变量对照 body_ratio 不转正0.316→转正0.476 vs 正立基准0.474;未转正产 pelvic_tilt −61.1° 错轴读数、转正 +7.7°;同-k 骨架帧真人字节活体 640×360 vs 360×640)"
+      ]
     },
     {
       "id": "5",
       "goal": "真人实拍对账(横屏+竖屏,身高173cm)与 R-017 step-8 合并执行",
       "module": "端到端",
-      "status": "pending",
+      "status": "blocked",
+      "blocked_reason": "需用户手机实拍素材:本机无摄像头;公版素材站(mixkit 403/archive+commons 超时/pexels 404)不可取;合成剪影过不了 coverage<0.6 且 cadence 不可对账(step-4c §四)。执行细则见 todo.md T-1(上传路径=手机页 http://<本机IP>:5173/m(IP 用 hostname -I 取)或 curl 端点)",
       "context": [
         "R-017/plan.md",
-        "R-018/requirements.md"
+        "R-018/requirements.md",
+        "R-018/todo.md"
       ]
     },
     {
@@ -210,6 +216,20 @@
       "conclusion": "判向可在原图一次检出上算,无需为判向重推理;但转正后粗扫关键点需重跑以统一坐标系",
       "evidence_count": 1,
       "status": "confirmed"
+    },
+    {
+      "id": "A-8",
+      "topic": "元数据禁用的活体面证实(tkhd display matrix 可控注入)",
+      "conclusion": "便携 ffmpeg7 写 rotate 被丢,改直写 tkhd matrix box 造出手机竖拍同款元数据并经 PyAV 反读 DISPLAYMATRIX 证实;真人内容在无/顺90/顺270/180 四种显示矩阵下 orient+rot_k 逐值一致(含矛盾元数据指向正确修正角的组 3),to_image 尺寸不随元数据变→判定确未读元数据(FR-2,补 step-4 未执行对照)",
+      "evidence_count": 2,
+      "status": "confirmed"
+    },
+    {
+      "id": "A-9",
+      "topic": "转正是否把指标送回正立系(真实推理唯一变量对照)",
+      "conclusion": "同一横躺字节:不转正 body_ratio 0.316 / pelvic_tilt −61.1°(错轴、物理不可能),转正 0.476 / +7.7°,正立基准 0.474 → 转正后尺度与角度回到正立系(FR-7);不转正的危害不是'少一个数'而是'给出看似合理的错数',与线上 −42.1° 读数同源。合成素材的 cadence 不可用于 ±5% 验收(正立基准自身 375 vs 真值 170)→ AC-1 数值对账归 step-5 真人",
+      "evidence_count": 3,
+      "status": "confirmed"
     }
   ],
   "requirements_version": 1,
@@ -237,7 +257,7 @@
       "desc": "转正改变 body_ratio/crop 语义,既有阈值需复核",
       "prob": "中",
       "impact": "中",
-      "mitigation": "实测转正后 body_ratio=0.306(门槛0.12裕度足);阈值不改,单测锁定",
+      "mitigation": "实测转正后 body_ratio=0.306(门槛0.12裕度足);阈值不改,单测锁定。A-9 活体复核:同一横躺内容不转正0.316→转正0.476 vs 正立基准0.474(差0.4%),阈值语义未漂移",
       "status": "open"
     },
     {

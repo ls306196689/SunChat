@@ -45,6 +45,10 @@ cd backend && python -m pytest tests -q
 `rotate`/`displaymatrix`/`container`/`stream`;② R-017/R-018 analysis A-1 已实证 PyAV 根本不
 应用该元数据(判定即使想读也读不到可执行语义)。**元数据变体的活体对照标注为未执行**。
 
+> **后续更新(2026-09-27,step-4b)**:该组对照后经直改 `tkhd` matrix box 已**补做完成**,
+> 真实推理下无/顺90/顺270/180 四种显示矩阵元数据的判定逐值一致(含真人正立 238-A 判 0)。
+> 详见 `step4b-ac4-metadata-variant.md`。上文"未执行"记载保留(反映 step-4 当时的真实状态)。
+
 ## 四、FR-7 活体面 + 门槛走向(真人横躺素材端到端)
 同一素材 `analyze_video`:
 ```

@@ -1,6 +1,6 @@
 # sunchat 需求台账
 
-当前需求 ID:R-017(active) | 下一个将分配:R-018 |
+当前需求 ID:R-018(execute,step-5 待真人素材) | 下一个将分配:R-019 |
 设计基线:见 baseline.md
 
 ## 需求历史

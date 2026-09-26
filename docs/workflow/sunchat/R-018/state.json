@@ -297,9 +297,9 @@
     "created": true,
     "remote": "https://github.com/ls306196689/SunChat.git",
     "branch": "master",
-    "last_pushed_commit": "e7bd6010",
+    "last_pushed_commit": "7e22c555",
     "push_pending": false,
-    "push_pending_note": "2026-09-27 已推清至 e7bd6010(本轮 4 commit:INDEX 抬头更正 / step-5 取证脚本+单测 / todo+checkpoint 交接)。⚠注意:本机 master 未设 upstream,`git diff @{u}...HEAD` 会 fatal 并使敏感自检空跑成假 CLEAN → 自检与范围核对一律用显式 `origin/master..HEAD`(先 git fetch)。push 仍需 -c http.version=HTTP/1.1。"
+    "push_pending_note": "2026-09-27 已推清(本轮多 commit,tip 以 `git ls-remote origin refs/heads/master` 为准,本 commit 推送后 origin==HEAD 即 last_pushed)。经验固化:①本机 push 走默认 HTTP/2 必 GnuTLS -110 → `-c http.version=HTTP/1.1`,间歇超时用 ls-remote 判成败;②本仓 master 未设 upstream,`@{u}` 系命令 fatal 且 stdout 空 → skill §push 自检会假 CLEAN(fail-open),自检与范围核对一律用显式 `origin/master..HEAD`;③门禁型检查 MUST 先于动作,禁止事后追认(skill issue-019/OPT-024,本轮实际踩过)。"
   },
-  "updated_at": "2026-09-27T05:08:10+08:00"
+  "updated_at": "2026-09-27T05:41:14+08:00"
 }

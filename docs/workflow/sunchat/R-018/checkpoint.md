@@ -10,7 +10,10 @@
   (归档节点必须单独 question,禁 blanket —— TODO T-2)
 - **用户当前指令**:「我要离开一段时间,后续我全都授权你按照最优方案执行。无法执行的记录todo项。」
   → 已建 `R-018/todo.md`(T-1 实拍 / T-2 归档两问 / T-3、T-3b R-017 步频遗留 /
-  T-4 R-019 立项 / T-5 环境事实 / T-6 skill issue-009 维持不处理)
+  T-4 R-019 立项 / T-5 环境事实 / T-6 skill issue-009 维持不处理 /
+  T-7 main.py:65 log_event 双值必抛(建议 micro)/ T-8 本仓 upstream 未设致自检 fail-open /
+  T-9 skill issue-018+019 打包 micro 与一次漏跑自检的流程违例)
+
 
 ## 已落地实现(勿重复设计)
 - `core/pose.py`:`ORIENT_UNDET`/`ORIENT_MAP`/`_norm_rot`/`rotate_frame`/`_pixel_pt`/
@@ -67,9 +70,13 @@
 - 服务**已在跑**(本轮 09-27 启动):`/api/v1/health` = healthy、llm_available=true。
   改码需重启(无 --reload):`pkill -f "uvicorn app.main"` 然后
   `cd backend && setsid --fork bash -c 'exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 >> backend.log 2>&1 < /dev/null'`(冷启动首请求 ~30s)
-- **git push 已推清**(2026-09-27,`ec28ae89→63db8f76` 共 9 commit,`push_pending=false`)。
-  ⚠经验:本机 `git push` 走默认 HTTP/2 必 `GnuTLS recv error (-110)`,
-  加 `git -c http.version=HTTP/1.1 push` 即通 → 下次遇 -110 先切 HTTP/1.1 再怀疑网络
+- **git push 已推清**(2026-09-27,tip 以 `git ls-remote` 为准;`push_pending=false`)。
+  ⚠三条固化:①默认 HTTP/2 必 `GnuTLS recv error (-110)` → `-c http.version=HTTP/1.1`,
+  间歇超时用 `ls-remote` 判成败(curl 200 不代表 push 能通);
+  ②**本仓 master 未设 upstream** → skill §push 自检用 `git diff @{u}...HEAD` 会 fatal 且
+  stdout 空 → **假 CLEAN**,自检/范围核对一律用显式 `git fetch` + `origin/master..HEAD`
+  (细则 todo T-8;skill 侧 issue-019);③**门禁型检查先于动作**,禁止"推完再补检"(todo T-9)。
+
 - `backend/.env` 已建(gitignored,`POSE_USER_HEIGHT_CM=173`);局域网访问:手机页 `/m`(本机 IP 用 `hostname -I` 取)
 - 便携 ffmpeg:`/tmp/fftool/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2`;
   ⚠ffmpeg 7 **写不了** rotate 元数据 → 用 `/tmp/mp4matrix.py` 改 tkhd(见 T-5)
@@ -82,4 +89,8 @@
 ## 遗留/后续(不在本需求)
 - R-019:`core/video.py`(R-010 视频对话抽帧路)同族不归一化(风险 R-4,INDEX 已提示)
 - R-020(建议):R-017 步频精度(cadence 高估 / 短样本 asym 抖动),见 todo T-3
+- R-021(建议 micro):`app/main.py:65` log_event 位置参/关键字双 `result` 致启动成功日志必抛,见 todo T-7
+- skill 侧(候选 micro R-009,均需用户点头):issue-018 取样过拦 + issue-019 取样 fail-open
+  与"检查须先于动作" → 建议加 `compliance.sh pre-push` 节点,见 todo T-8/T-9
 - skill issue-009 用户选暂不处理
+

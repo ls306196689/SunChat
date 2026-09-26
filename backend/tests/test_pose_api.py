@@ -28,6 +28,23 @@ def _synth_avi(seconds=2.0, fps=15, size=48):
     return buf.getvalue()
 
 
+def _synth_avi_rect(w=64, h=32, seconds=2.0, fps=15):
+    """竖→横可辨的矩形视频(AC-5 用:转正与否落盘尺寸不同)。"""
+    import av
+    buf = io.BytesIO()
+    c = av.open(buf, "w", format="avi")
+    st = c.add_stream("mjpeg", rate=fps)
+    st.width, st.height = w, h
+    st.pix_fmt = "yuvj420p"
+    for i in range(int(seconds * fps)):
+        arr = np.zeros((h, w, 3), dtype=np.uint8)
+        arr[:, :, i % 3] = 200
+        c.mux(st.encode(av.VideoFrame.from_ndarray(arr, format="rgb24").reformat(format="yuvj420p")))
+    c.mux(st.encode())
+    c.close()
+    return buf.getvalue()
+
+
 def _mk_result():
     from core.pose import Cycle, PoseResult
     ts = [i / 15 for i in range(30)]
@@ -166,6 +183,102 @@ class TestPoseEndpoint:
         _patch_ok(monkeypatch)
         r = self._up(client, _synth_avi(), sid="abc")
         assert r.status_code == 400
+
+
+class TestOrientPassthrough:
+    """R-018 P4:端点同-k 取帧(AC-5)+ evt orient 字段(FR-5)。"""
+
+    def _up(self, client, data, sid="41"):
+        return client.post("/api/v1/chat/video/pose",
+                           files={"file": ("r.avi", data, "video/x-msvideo")},
+                           data={"session_id": sid})
+
+    def _force_template(self, monkeypatch):
+        """全局 fake LLM 支持视觉会走 VL 路(报告=固定假文案)→ 本类断言模板文案,
+        固定走模板路(transparency 行在模板与 VL 上下文两路均有,模板侧可断)。"""
+        from core.pose_report import template_report
+        monkeypatch.setattr("core.pose_report.build_report",
+                            lambda res, frames, **kw: (template_report(res), "template"))
+
+    def test_frames_at_ts_rotates(self):
+        """_frames_at_ts(rot=1) → 帧宽高互换;rot 缺省/越界 → 不转不抛。"""
+        from app.api.v1.routes.chat import _frames_at_ts
+        data = _synth_avi_rect(w=64, h=32)
+        f0 = _frames_at_ts(data, [0.2])[0]
+        f1 = _frames_at_ts(data, [0.2], 1)[0]
+        assert f0 is not None and (f1.shape[0], f1.shape[1]) == (f0.shape[1], f0.shape[0])
+        assert _frames_at_ts(data, [0.2])[0].shape == f0.shape
+        assert _frames_at_ts(data, [0.2], 9)[0].shape == f0.shape  # 越界按 0
+
+    def test_endpoint_passes_rot_k(self, client, monkeypatch):
+        """AC-5:result.orient.rot_k=1 → 端点用 rot=1 取帧(横躺源视频落盘尺寸随之转正)。"""
+        import core.pose as cp
+        from app.api.v1.routes import chat as cr
+        self._force_template(monkeypatch)
+        seen = {}
+        real = cr._frames_at_ts
+
+        def spy(data, target_ts, rot=0):
+            seen["rot"] = rot
+            return real(data, target_ts, rot)
+        monkeypatch.setattr(cr, "_frames_at_ts", spy)
+        res = _mk_result()
+        res.orient = {"orient": "90cw", "orient_conf": 1.0, "orient_samples": 9,
+                      "orient_abstain": 0, "rot_k": 1}
+        res.quality["orient"], res.quality["orient_conf"] = "90cw", 1.0
+        monkeypatch.setattr(cp, "analyze_video", lambda data, **kw: res)
+        r = self._up(client, _synth_avi_rect(w=64, h=32))
+        assert r.status_code == 200, r.text
+        assert seen.get("rot") == 1, "端点必须把 result.orient.rot_k 传给取帧(FR-4)"
+        d = r.json()["data"]
+        assert d["quality"]["orient"] == "90cw"
+        assert "已按人体朝向转正" in d["report"] and "原为 90cw" in d["report"]
+        from PIL import Image
+        import io as _io
+        fid = d["frame_ids"][0]
+        img = Image.open(_io.BytesIO(client.get(f"/api/v1/chat/images/{fid}").content))
+        # 同 k 取帧:64×32 源经 rot=1 → 32×64,crop(0.25..0.75) → 16×32(竖)
+        # 负对照见 test_endpoint_default_no_orient_stays_unrotated(同夹具未传 rot → 32×16 横)
+        assert img.size == (16, 32), f"骨架帧应在转正系内,实得 {img.size}" 
+
+    def test_endpoint_default_no_orient_stays_unrotated(self, client, monkeypatch):
+        """AC-5 负例 + AC-7:老 result(无 orient 字段)→ rot=0,落盘仍横幅(忘传 rot 必失败)。"""
+        import core.pose as cp
+        from app.api.v1.routes import chat as cr
+        self._force_template(monkeypatch)
+        from PIL import Image
+        import io as _io
+        seen = {}
+        real = cr._frames_at_ts
+
+        def spy(data, target_ts, rot=0):
+            seen["rot"] = rot
+            return real(data, target_ts, rot)
+        monkeypatch.setattr(cr, "_frames_at_ts", spy)
+        monkeypatch.setattr(cp, "analyze_video", lambda data, **kw: _mk_result())
+        r = self._up(client, _synth_avi_rect(w=64, h=32))
+        assert r.status_code == 200, r.text
+        assert seen.get("rot") == 0
+        fid = r.json()["data"]["frame_ids"][0]
+        img = Image.open(_io.BytesIO(client.get(f"/api/v1/chat/images/{fid}").content))
+        assert img.size == (32, 16)   # 源 64×32 未转正,crop(0.25..0.75) → 32×16
+
+    def test_ok_log_carries_orient(self, client, monkeypatch, caplog):
+        """FR-5:ok 日志带 orient/orient_conf;undetermined 同样打印(统计占比,不新增拒因)。"""
+        import core.pose as cp
+        self._force_template(monkeypatch)
+        res = _mk_result()
+        res.orient = {"orient": "undetermined", "orient_conf": 0.0, "orient_samples": 0,
+                      "orient_abstain": 4, "rot_k": 0}
+        res.quality["orient"], res.quality["orient_conf"] = "undetermined", 0.0
+        monkeypatch.setattr(cp, "analyze_video", lambda data, **kw: res)
+        with caplog.at_level("INFO"):
+            r = self._up(client, _synth_avi())
+        assert r.status_code == 200
+        line = [l for l in caplog.messages if "evt=pose.analyze" in l and "result=ok" in l][0]
+        assert "orient=undetermined" in line
+        assert "朝向不可定" in r.json()["data"]["report"]
+        assert r.json()["data"]["metrics"]["cadence_spm"] == 172.0  # 指标照常(FR-6)
 
 
 class TestSaveAssistantExtension:

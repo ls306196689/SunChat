@@ -116,3 +116,48 @@ class TestTransparencyV2:
         build_report(r, ["b64"], llm=llm, vision_ok=True)
         content = llm.calls[0][0][1]["content"]
         assert "跑动分析段 2.2s" in content
+
+
+class TestTransparencyOrient:
+    """R-018 FR-5/6:朝向透明度行(转正/不可定/正立三态,模板与 VL 双路)。"""
+
+    def _mk_q(self, orient=None):
+        from core.pose import PoseResult
+        m = {"cadence_spm": 170.0, "stance_swing_ratio": 0.8,
+             "knee_angle_at_contact_deg": 158.0, "knee_angle_at_toeoff_deg": 61.0,
+             "hip_rom_deg": 52.0, "pelvic_tilt_deg": 3.2, "asymmetry_pct": 4.1,
+             "pace": None, "pace_reason": None}
+        q = {"fps_eff": 25.0, "activity_span": 2.2}
+        if orient is not None:
+            q["orient"] = orient
+        return PoseResult(metrics=m, quality=q, cycles=[], landmarks_seq=[],
+                          sample_ts=[], video_duration=3.2)
+
+    def test_rotated_line_first(self):
+        """转正档 → 报告首位打印"已按人体朝向转正",并按源朝向读。"""
+        from core.pose_report import template_report, transparency_lines
+        for o in ("90cw", "270cw", "180"):
+            tl = transparency_lines(self._mk_q(o))
+            assert tl[0] == f"画面已按人体朝向转正(头朝上,原为 {o})"
+            assert "已按人体朝向转正" in template_report(self._mk_q(o))
+
+    def test_undetermined_line_and_metrics_kept(self):
+        """AC-3 文案面:不可定 → 降级文案在,指标段照常(不拒、不删数字)。"""
+        from core.pose_report import template_report
+        t = template_report(self._mk_q("undetermined"))
+        assert "朝向不可定" in t and "指标可能失真" in t
+        assert "170.0" in t   # 步频照出 = 未新增拒析
+
+    def test_upright_silent_and_old_results_unchanged(self):
+        """AC-7:orient="0" 与"老结果无 orient 键" → 透明度输出逐值不变(不打印噪音)。"""
+        from core.pose_report import transparency_lines
+        base = transparency_lines(self._mk_q(None))
+        assert transparency_lines(self._mk_q("0")) == base
+        assert not any("朝向" in l for l in base)
+
+    def test_vl_prompt_carries_orient_line(self):
+        """FR-5:VL 路共用 transparency_lines → 上下文同样带朝向行。"""
+        llm = FakeLLM(text="ok")
+        build_report(self._mk_q("270cw"), ["b64"], llm=llm, vision_ok=True)
+        assert "原为 270cw" in llm.calls[0][0][1]["content"]
+

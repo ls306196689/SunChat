@@ -43,9 +43,15 @@ def _pace_line(metrics: dict):
 
 
 def transparency_lines(result) -> list:
-    """R-017v2 FR-8/9/10/12:透明度行——真实帧率/分析段/慢动作还原/配速口径。"""
+    """R-017v2 FR-8/9/10/12 + R-018 FR-5/6:透明度行——朝向/真实帧率/分析段/慢动作/配速。"""
     q, m = result.quality, result.metrics
     lines = []
+    q = q if isinstance(q, dict) else {}
+    orient = q.get("orient")
+    if orient in ("90cw", "270cw", "180"):
+        lines.append(f"画面已按人体朝向转正(头朝上,原为 {orient})")
+    elif orient == "undetermined":
+        lines.append("⚠人体朝向不可定,已按原始画面分析,指标可能失真")
     if q.get("fps_eff"):
         lines.append(f"分析帧率≈{q['fps_eff']}fps(PTS 实测)")
     if q.get("activity_span"):

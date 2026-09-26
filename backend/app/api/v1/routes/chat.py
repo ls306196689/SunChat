@@ -233,6 +233,7 @@ async def analyze_video_pose(file: UploadFile = File(...), session_id: str = For
     try:
         result = await run_in_threadpool(analyze_video, data)
     except PoseQualityError as e:
+        # 拒析路径无 result → orient 无从取值,按设计省略该字段(FR-5 占比统计走 ok 路)
         log_event(logger, "pose.analyze", "run", "fail", reason=e.reason)
         raise HTTPException(status_code=400, detail=f"{e.detail}。{_POSE_REJECT_HINT}")
     except FileNotFoundError as e:
@@ -248,7 +249,9 @@ async def analyze_video_pose(file: UploadFile = File(...), session_id: str = For
     img_dir.mkdir(parents=True, exist_ok=True)
     picks = select_key_frames(result)
     want_ts = [result.sample_ts[i] for i, _ in picks]
-    frames_at = await run_in_threadpool(_frames_at_ts, data, want_ts)
+    # R-018 FR-4:端点取帧与分析同 k(忘记传 = 骨架回横躺坐标系,AC-5 负例钉住)
+    rot_k = int((getattr(result, "orient", None) or {}).get("rot_k", 0) or 0)
+    frames_at = await run_in_threadpool(_frames_at_ts, data, want_ts, rot_k)
     frame_ids, frame_b64s = [], []
     import base64
     import io as _io
@@ -281,6 +284,8 @@ async def analyze_video_pose(file: UploadFile = File(...), session_id: str = For
               span=result.quality.get("activity_span"),
               pace="y" if result.metrics.get("pace") else "n",
               crop="y" if getattr(result, "crop_bbox", None) else "n",
+              orient=result.quality.get("orient"),          # R-018 FR-5
+              orient_conf=result.quality.get("orient_conf"),
               total_ms=int((_t.monotonic() - t0) * 1000))
     return {"code": 200, "message": "success",
             "data": {"report": report, "report_source": report_source,
@@ -288,10 +293,16 @@ async def analyze_video_pose(file: UploadFile = File(...), session_id: str = For
                      "quality": result.quality, "message_id": msg.id}}
 
 
-def _frames_at_ts(data: bytes, target_ts: List[float]) -> List[Optional[object]]:
-    """单次解码,对每个目标时间戳取最近帧 RGB(P2 纯函数接口的 P4 取帧层)。"""
+def _frames_at_ts(data: bytes, target_ts: List[float], rot: int = 0) -> List[Optional[object]]:
+    """单次解码,对每个目标时间戳取最近帧 RGB(P2 纯函数接口的 P4 取帧层)。
+
+    R-018 FR-4:`rot` 必须与分析请求同一个 k(`result.orient["rot_k"]`),帧经
+    `np.rot90` 转正后才交给 `draw_skeleton`——否则指标正立、骨架仍横躺。
+    默认 0 → 与既有调用/测试逐值一致;越界按 0(同 `pose.rotate_frame`,永不抛)。
+    """
     import av, io as _io
     import numpy as np
+    from core.pose import rotate_frame
     if not target_ts:
         return []
     out: List[Optional[np.ndarray]] = [None] * len(target_ts)
@@ -303,7 +314,7 @@ def _frames_at_ts(data: bytes, target_ts: List[float]) -> List[Optional[object]]
             for i, tt in enumerate(target_ts):
                 d = abs(t - tt)
                 if best[i] is None or d < best[i][0]:
-                    best[i] = (d, np.asarray(f.to_image().convert("RGB")))
+                    best[i] = (d, rotate_frame(np.asarray(f.to_image().convert("RGB")), rot))
         c.close()
     except Exception:
         pass

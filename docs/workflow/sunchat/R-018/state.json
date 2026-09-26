@@ -88,45 +88,56 @@
       "id": "1",
       "goal": "detect_orientation 纯函数 + POSE_ORIENT_* 三参 + sample_frames(rot=)",
       "module": "pose-core/config",
-      "status": "pending",
+      "status": "done",
       "context": [
         "R-018/modules/pose-core.md",
         "backend/core/pose.py",
         "backend/app/config.py",
         "backend/tests/test_pose_core.py"
-      ]
+      ],
+      "commit": "31d2dc30",
+      "evidence": "detect_orientation+配置+rot 参数;test_pose_core 39 passed",
+      "finished_at": "2026-09-26T23:19:23+08:00"
     },
     {
       "id": "2",
       "goal": "analyze_video 插入判向+粗扫重跑+转正系门槛+orient 字段/quality 增键",
       "module": "pose-core",
-      "status": "pending",
+      "status": "done",
       "context": [
         "R-018/modules/pose-core.md",
         "R-018/design-change.md",
         "backend/core/pose.py"
-      ]
+      ],
+      "commit": "b4beb0d4",
+      "evidence": "流水线插入+重跑粗扫+orient 字段/quality 增键;44 passed",
+      "finished_at": "2026-09-26T23:19:23+08:00"
     },
     {
       "id": "3",
       "goal": "P4 _frames_at_ts(rot=k)+evt orient 字段;P3 透明度行三态文案",
       "module": "routes/chat.py+pose_report.py",
-      "status": "pending",
+      "status": "done",
       "context": [
         "R-018/modules/pose-api.md",
         "R-018/modules/pose-report.md",
         "backend/app/api/v1/routes/chat.py",
         "backend/core/pose_report.py"
-      ]
+      ],
+      "commit": "2d482c85",
+      "evidence": "P4 同-k 取帧+evt,P3 三态透明度行;全量 367 passed 1 skipped(AC-7)",
+      "finished_at": "2026-09-26T23:19:23+08:00"
     },
     {
       "id": "4",
       "goal": "全量回归 340+1skip + 带 rotate 元数据合成 mp4 活体冒烟(AC-4 活体面)",
       "module": "全部",
-      "status": "pending",
+      "status": "done",
       "context": [
         "R-018/design-change.md"
-      ]
+      ],
+      "finished_at": "2026-09-27T00:13:16+08:00",
+      "evidence": "run-evidence/step4-regression-and-smoke.md:367 passed 1 skipped(AC-7 零回归,既有用例一字未改);真人 AC-4 活体面=判定只随人体朝向变(横幅判270cw/同内容竖幅不偷判0/238-A竖屏判0);rotate=90 元数据变体本机 ffmpeg7 写入被丢弃→标注未执行,由 grep 禁读+A-1 等效钉死;FR-7 活体 body_ratio .256→.271;k≠0 重跑耗时端点 ms≈580 无劣化(R-6)"
     },
     {
       "id": "5",
@@ -269,5 +280,5 @@
     "last_pushed_commit": "61fd2b51",
     "push_pending": false
   },
-  "updated_at": "2026-09-26T18:21:45+08:00"
+  "updated_at": "2026-09-27T00:13:16+08:00"
 }

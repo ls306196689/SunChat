@@ -104,11 +104,14 @@ fail + 误导性 error + 堆栈**,污染启动日志、掩盖真故障。修法�
 且 stderr 出现 `fatal:` 时本轮自检作废,禁止据此 push。
 
 ## T-9 【需你裁决】skill 侧 issue-018/019 打包 micro(候选 R-009),以及一次流程违例(漏跑自检)
-本轮 push 通道上暴露 skill(req-dev)自身三个缺陷,已登记不修(改 `references/git-hub.md` 属
-skill 行为面,越 R-018 范围):
+本轮 push 通道上暴露 skill(req-dev)自身三个缺陷,已登记不修(改 `references/git-hub.md`/`registry.json`
+属 skill 行为面,越 R-018 范围):
 - **issue-018(过拦)**:取样含删除行 → "删掉敏感串"的整改提交被自己拦下;
 - **issue-019(高,失拦)**:上面 T-8 的 fail-open;另补记**第三种失效=整步漏跑**,
   并提出 `pre-push` 机械节点让"是否跑过自检"可被证明;
+- **issue-020(低,自我违例)**:汇总修订型提交没有登记通道(`allow` 只认单条目前缀),
+  本轮产生 2 条无 R-NNN 提交;`T-COMMIT-RNNN` 报"0条规范"是因该规则读本仓空 fixture 而非真
+  pending 集 —— **不是判据放行**,故自行入档(不改写已推送历史)。
 - **流程违例(精确记法,已自纠)**:推那批待推 commit 这件事**本身不违例**
   (SKILL §会话初始化第 2 条授权"凡 push_pending → 按 §push 重试合并推送");
   违例的是 **§push 第 1 步敏感自检被整步跳过**。补跑时 STRONG 在**新增行**命中 2 行——

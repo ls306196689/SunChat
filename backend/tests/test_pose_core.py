@@ -3,6 +3,8 @@ R-017 P1 pose-core 单测 v2(离线确定性;MediaPipe 推理 monkeypatch 为合
 覆盖:AC-1(步频)、AC-7(死段稀释回归护栏)、AC-8(慢动作还原)、AC-9(配速三态)、
 质量门槛(no_activity/low_conf/body_too_small)、probe 帧率探测(slo 容器真身,呼应 A-2)、
 段采(FR-10)、机位无关性(D-3 护栏)。
+
+R-018 追加(orient 归一化,判定面):TestOrientation(AC-1 判档/AC-2 正立/AC-3 三分支/AC-4 解耦)。横躺夹具 `_rot_lm` 对**像素域**几何做与 np.rot90 同构的归一化变换;k 方向真值 (4−src_k)%4 已用网格实验钉死。
 夹具规范(checkpoint 教训):时间相干(死段零振荡/跑动段按真实时刻起振),
 钉地几何 v5 教训:落点事件轴 land=(2j+side_off)·GAP,同脚跨 2 落点距,连续落点距=GAP。
 """
@@ -337,3 +339,184 @@ class TestSampling:
         import core.pose as pose
         frames, _, _ = pose.sample_frames(self._avi(15, 15, 320, 240), fps=5.0, width=160)
         assert frames[0].shape[1] == 160
+
+
+    def test_rot_param_swaps_dims_and_clamps(self):
+        """R-018 FR-4:sample_frames(rot=1) 帧宽高互换;越界/非法值按 0(不抛)。"""
+        import core.pose as pose
+        avi = self._avi(15, 15, 320, 240)
+        f0, _, _ = pose.sample_frames(avi, fps=5.0)
+        f1, _, _ = pose.sample_frames(avi, fps=5.0, rot=1)
+        assert (f1[0].shape[0], f1[0].shape[1]) == (f0[0].shape[1], f0[0].shape[0])
+        for bad in (-1, 4, None, "x"):
+            fb, _, _ = pose.sample_frames(avi, fps=5.0, rot=bad)
+            assert fb[0].shape == f0[0].shape, f"rot={bad} 应等同 0 且不抛"
+
+
+# ==================== R-018 朝向归一化夹具与判定面单测(AC-1/2/3/4)====================
+
+def _rot_lm(lm, k):
+    """把一帧归一化关键点按 np.rot90(k) 的语义旋转(模拟"人在画面里被转了 k 档")。"""
+    if k % 4 == 0 or not lm:
+        return list(lm)
+    out = []
+    for (x, y, z, v) in lm:
+        if k % 4 == 1:
+            nx, ny = y, 1.0 - x
+        elif k % 4 == 2:
+            nx, ny = 1.0 - x, 1.0 - y
+        else:
+            nx, ny = 1.0 - y, x
+        out.append((nx, ny, z, v))
+    return out
+
+
+# ==================== R-018 朝向归一化单测(AC-1/2/3/4 判定面)====================
+
+
+class TestOrientation:
+    """detect_orientation 纯函数(无需 mock,AC 判定面)。"""
+
+    HW = (480, 640)   # 横幅:人在其中可正立或横躺
+
+    def test_upright_is_zero(self):
+        """AC-2 判定面:正立关键点 → orient="0", rot_k=0, conf=1。"""
+        import core.pose as pose
+        lms = [_gait(t / 5.0, 1.5) for t in range(8)]
+        r = pose.detect_orientation(lms, self.HW)
+        assert r["orient"] == "0" and r["rot_k"] == 0
+        assert r["orient_conf"] == pytest.approx(1.0) and r["orient_samples"] == 8
+
+    @pytest.mark.parametrize("src_k,expect_name,expect_rot", [
+        (1, "270cw", 3), (2, "180", 2), (3, "90cw", 1)])
+    def test_rotated_fixtures(self, src_k, expect_name, expect_rot):
+        """AC-1 判定面:像素被 rot90(src_k) 的夹具 → 修正档 rot_k=(4−src_k)%4。"""
+        import core.pose as pose
+        lms = [_rot_lm(_gait(t / 5.0, 1.5), src_k) for t in range(8)]
+        r = pose.detect_orientation(lms, self.HW)
+        assert r["rot_k"] == expect_rot, f"src_k={src_k} → {r}"
+        assert r["orient"] == expect_name
+        assert r["orient_conf"] == pytest.approx(1.0)
+
+    def test_undetermined_no_person(self):
+        """AC-3a:全无人帧 → undetermined, rot_k=0(不转不抛)。"""
+        import core.pose as pose
+        r = pose.detect_orientation([None] * 10, self.HW)
+        assert r["orient"] == "undetermined" and r["rot_k"] == 0
+        assert r["orient_conf"] == 0.0 and r["orient_samples"] == 0
+
+    def test_undetermined_few_samples(self):
+        """AC-3b:有效帧 < POSE_ORIENT_MIN_SAMPLES(3) → undetermined。"""
+        import core.pose as pose
+        lms = [_rot_lm(_gait(0.2, 1.5), 1), None, _rot_lm(_gait(0.4, 1.5), 1)]
+        r = pose.detect_orientation(lms, self.HW)
+        assert r["orient"] == "undetermined" and r["rot_k"] == 0
+        assert r["orient_samples"] == 2
+
+    def test_abstain_edge_band(self):
+        """AC-3c:θ≈45° 落两档中间 → 逐帧弃权 → undetermined。"""
+        import core.pose as pose
+
+        def diag():
+            lm = _gait(0.0, 1.5)
+            for i in (23, 24):                       # 髋中点 (0.5, 0.62)
+                lm[i] = (0.50, 0.62, 0.0, 0.9)
+            # 肩 = 髋 + 像素域 (30, -30) → θ=45°(480×640:Δn=(30/640, -30/480))
+            lm[11] = (0.50 + 30 / 640, 0.62 - 30 / 480, 0.0, 0.9)
+            lm[12] = (0.50 + 34 / 640, 0.62 - 34 / 480, 0.0, 0.9)
+            lm[0] = (0.50 + 50 / 640, 0.62 - 50 / 480, 0.0, 0.9)   # 鼻同向延长线
+            return lm
+        r = pose.detect_orientation([diag() for _ in range(6)], self.HW)
+        assert r["orient"] == "undetermined" and r["rot_k"] == 0
+        assert r["orient_abstain"] == 6 and r["orient_samples"] == 0
+
+    def test_majority_vote_and_conf(self):
+        """FR-3:混合档位投票取多数,conf=占比(4:2 → 0.67≥0.6 通过)。"""
+        import core.pose as pose
+        lms = ([_rot_lm(_gait(i / 5.0, 1.5), 1) for i in range(4)] +
+               [_rot_lm(_gait((i + 10) / 5.0, 1.5), 2) for i in range(2)])
+        r = pose.detect_orientation(lms, self.HW)
+        assert r["rot_k"] == 3 and r["orient"] == "270cw"
+        assert r["orient_conf"] == pytest.approx(4 / 6, abs=0.01)
+
+    def test_low_agreement_undetermined(self):
+        """一致度 < MIN_AGREE(0.6) → undetermined(2:1:1 → 0.5)。"""
+        import core.pose as pose
+        lms = ([_rot_lm(_gait(i / 5.0, 1.5), 1) for i in range(2)] +
+               [_rot_lm(_gait(3.0, 1.5), 2)] + [_rot_lm(_gait(5.0, 1.5), 3)])
+        r = pose.detect_orientation(lms, self.HW)
+        assert r["orient"] == "undetermined" and r["rot_k"] == 0
+        assert r["orient_conf"] == pytest.approx(0.5)
+
+    def test_never_raises_on_garbage(self):
+        """永不抛契约:垃圾输入(含 NaN / 短关键点 / 坏 hw)→ undetermined,不抛。"""
+        import core.pose as pose
+        nan_lm = [(float("nan"), 0.5, 0.0, 1.0)] * 33
+        for junk in ([], [[(0, 0)] * 5], [1, 2, 3], [nan_lm],
+                     [None, [], [(0.5, 0.5, 0, 1)] * 33]):
+            r = pose.detect_orientation(junk, self.HW)
+            assert r["orient"] in ("undetermined", "0") and r["rot_k"] in (0, 1, 2, 3)
+        for bad_hw in ((0, 0), None, ("a", "b")):
+            r = pose.detect_orientation([_gait(0.1, 1.5)], bad_hw)
+            assert r["orient"] == "undetermined" and r["rot_k"] == 0
+        # 躯干退化(肩髋同点)/ 关键点不足 33 → 弃权而非抛
+        deg = _gait(0.0, 1.5)
+        for i in (11, 12, 23, 24):
+            deg[i] = (0.5, 0.5, 0.0, 0.9)
+        assert pose.detect_orientation([deg] * 5, self.HW)["orient"] == "undetermined"
+        assert pose.detect_orientation([[(0.5, 0.4, 0, 1)] * 12] * 5,
+                                       self.HW)["orient"] == "undetermined"
+
+    def test_decoupled_from_aspect_ratio(self):
+        """AC-4:同一**人体朝向**在任何 frame_hw 下判同一档(禁 W>H 判据的正向证明)。
+
+        正立内容 → 横幅 frame_hw 与竖幅 frame_hw 都判 "0";横躺内容 → 两者
+        都判 270cw。若实现偷用宽高比作判据,竖幅分支必然给不同结果。
+        """
+        import core.pose as pose
+        up = [_gait(t / 5.0, 1.5) for t in range(6)]
+        r1, r2 = pose.detect_orientation(up, (480, 640)), pose.detect_orientation(up, (640, 480))
+        assert r1["orient"] == r2["orient"] == "0" and r1["rot_k"] == r2["rot_k"] == 0
+        flat = [_rot_lm(_gait(t / 5.0, 1.5), 1) for t in range(6)]
+        f1, f2 = pose.detect_orientation(flat, (480, 640)), pose.detect_orientation(flat, (640, 480))
+        assert f1["orient"] == f2["orient"] == "270cw"
+        assert f1["rot_k"] == f2["rot_k"] == 3
+
+    def test_theta_is_pixel_domain(self):
+        """D-1:θ 必须是**像素域**角(归一化向量 ×W/×H 后算)。
+
+        同一归一化躯干(Δn=(0.19, −0.05),a/b=3.8)喂两种 frame_hw:
+        480×640 → 像素 θ=atan(3.8×640/480)=78.9° → 入 90cw 档;
+        640×480 → 像素 θ=atan(3.8×480/640)=70.6° → 落两档中间 → 全部弃权。
+        若实现直接在归一化域算 θ(=50.7°),两种 hw 都会弃权,断言即失败。
+        """
+        import core.pose as pose
+
+        def torso():
+            lm = _gait(0.0, 1.5)
+            for i in (23, 24):                       # 髋中点
+                lm[i] = (0.45, 0.62, 0.0, 0.9)
+            for i, dx in ((11, 0.185), (12, 0.195)):  # 肩中点 = 髋 + (0.19, -0.05)
+                lm[i] = (0.45 + dx, 0.57, 0.0, 0.9)
+            lm[0] = (0.45 + 0.26, 0.553, 0.0, 0.9)    # 鼻沿 u 方向延长(消 180°)
+            return lm
+
+        lms = [torso() for _ in range(6)]
+        land = pose.detect_orientation(lms, (480, 640))
+        assert land["orient"] == "90cw" and land["rot_k"] == 1 and land["orient_samples"] == 6
+        port = pose.detect_orientation(lms, (640, 480))
+        assert port["orient"] == "undetermined" and port["orient_abstain"] == 6
+
+    def test_source_has_no_metadata_or_aspect_basis(self):
+        """FR-2 grep 钉死:判定源码不读元数据、不用宽高比/检出性作判据。"""
+        import inspect
+        import core.pose as pose
+        src = (inspect.getsource(pose.detect_orientation) +
+               inspect.getsource(pose._frame_orient) +
+               inspect.getsource(pose._pixel_pt) +
+               inspect.getsource(pose._q_to_k)).lower()
+        for forbidden in ("metadata", "side_data", "rotate", "displaymatrix",
+                          "container", "stream", "visibility"):
+            assert forbidden not in src, f"判定源码出现禁用依据: {forbidden}"
+        for cmp_ in ("w > h", "h > w", "w>=h", "h>=w"):
+            assert cmp_ not in src, f"判定源码出现宽高比比较: {cmp_}"

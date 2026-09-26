@@ -60,17 +60,136 @@ def _resample_indices(n: int, k: int) -> List[int]:
     return sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})
 
 
+# ==================== 朝向归一化(R-018,analysis A-4/A-5)====================
+# 依据用户明示指令:"横屏竖屏不能作为旋转依据。要识别人的朝向。以人头上脚下为基准。"
+# 因此判据只有检出人体自身几何:**禁止**读容器/stream rotate 元数据、**禁止**用画面
+# 宽高比、**禁止**用"某朝向能否检出 MediaPipe"择优(A-4:真 upright 在生产门槛下检不出,
+# 错误朝向反而能检出并给出反向几何)。
+
+ORIENT_UNDET = "undetermined"
+# rot_k → 对外档位串。串描述**原始画面里人体的偏转方向(顺时针)**:
+#   "0"=人体已正立;"90cw"=头朝右(需 np.rot90 k=1 逆90 修正);"180"=头朝下;
+#   "270cw"=头朝左(需 np.rot90 k=3 即顺90 修正)。
+# 依据 decisions.md D-5:np.rot90 为逆时针,故 rot_k=q/90(q=顺时针偏转角),
+# 报告文案"原为 X"按源朝向读,避免"修正量/源朝向"两种读法混用。
+ORIENT_MAP = {0: "0", 1: "90cw", 2: "180", 3: "270cw"}
+
+
+def _norm_rot(k) -> int:
+    """rot 参数归一:仅接受 0..3,其余(含非数)一律 0。永不抛(与 probe 同风格)。"""
+    try:
+        k = int(k)
+    except (TypeError, ValueError):
+        return 0
+    return k if k in (0, 1, 2, 3) else 0
+
+
+def rotate_frame(arr: np.ndarray, k: int = 0) -> np.ndarray:
+    """像素级转正(唯一落点;不用 PyAV display matrix —— A-1 实证其不生效)。"""
+    k = _norm_rot(k)
+    return arr if k == 0 else np.ascontiguousarray(np.rot90(arr, k))
+
+
+def _pixel_pt(p, w: float, h: float) -> Tuple[float, float]:
+    """归一化关键点 → 像素坐标(decisions.md D-1:角度必须在像素域算)。"""
+    return float(p[0]) * w, float(p[1]) * h
+
+
+def _frame_orient(lm: list, w: float, h: float) -> Optional[int]:
+    """单帧 → 转正档 q∈{0,90,180,270};退化/落边界带 → None(弃权)。
+
+    u = 单位化(肩中点 − 髋中点)(中点法对左右关键点误配不敏感,R-1 缓解);
+    鼻在 u 上的符号消 180° 歧义(鼻必在头侧);θ=atan2(u_x, −u_y) → 0=头朝上、顺时针为正。
+    """
+    try:
+        sh = [(lm[IDX["L_shoulder"]][0] + lm[IDX["R_shoulder"]][0]) / 2.0,
+              (lm[IDX["L_shoulder"]][1] + lm[IDX["R_shoulder"]][1]) / 2.0]
+        hp = [(lm[IDX["L_hip"]][0] + lm[IDX["R_hip"]][0]) / 2.0,
+              (lm[IDX["L_hip"]][1] + lm[IDX["R_hip"]][1]) / 2.0]
+        sx, sy = _pixel_pt(sh, w, h)
+        hx, hy = _pixel_pt(hp, w, h)
+        ux, uy = sx - hx, sy - hy
+        n = math.hypot(ux, uy)
+        if not (n > 1e-6):                # 退化躯干/NaN → 弃权(含 nan:比较恒 False)
+            return None
+        ux, uy = ux / n, uy / n
+        if len(lm) > 0 and lm[0] is not None:   # nose 符号消 180°
+            nx, ny = _pixel_pt(lm[0], w, h)
+            if (nx - hx) * ux + (ny - hy) * uy < 0:
+                ux, uy = -ux, -uy
+        theta = math.degrees(math.atan2(ux, -uy))   # 0=头朝上,顺时针为正
+        if not math.isfinite(theta):
+            return None
+        q = int(round(theta / 90.0)) * 90 % 360
+        delta = abs((theta - q + 180.0) % 360.0 - 180.0)
+    except (TypeError, ValueError, IndexError, AttributeError):
+        return None
+    from app.config import settings
+    if delta > float(settings.POSE_ORIENT_EDGE_DEG):
+        return None                      # 斜握/异常:不在四档内,宁可不转(R-2)
+    return q
+
+
+def _q_to_k(q: int) -> int:
+    """人体顺时针偏转档 q(0/90/180/270)→ np.rot90 的 k(rot90 为逆时针,k=q/90)。"""
+    return _Q_TO_K.get(int(q) % 360, 0)
+
+
+_Q_TO_K = {0: 0, 90: 1, 180: 2, 270: 3}
+
+
+def detect_orientation(lms: list, frame_hw: Tuple[int, int]) -> dict:
+    """粗扫帧关键点(归一化,None=该帧无人)→ 朝向判定。纯函数,永不抛(FR-1/2/3)。
+
+    返回 {"orient", "orient_conf", "orient_samples", "orient_abstain", "rot_k"}
+    """
+    from app.config import settings
+    out = {"orient": ORIENT_UNDET, "orient_conf": 0.0, "orient_samples": 0,
+           "orient_abstain": 0, "rot_k": 0}
+    try:
+        h, w = int(frame_hw[0]), int(frame_hw[1])
+        if h <= 0 or w <= 0 or not lms:
+            return out
+        qs, abstain = [], 0
+        for lm in lms:
+            if not lm:
+                continue
+            q = _frame_orient(lm, float(w), float(h))
+            if q is None:
+                abstain += 1
+            else:
+                qs.append(q)
+        out["orient_abstain"] = int(abstain)
+        out["orient_samples"] = len(qs)
+        if len(qs) < int(settings.POSE_ORIENT_MIN_SAMPLES):
+            return out                   # 样本不足 → 不转(FR-6)
+        counts = {q: qs.count(q) for q in set(qs)}
+        q_best = max(counts, key=lambda q: (counts[q], -q))
+        agree = counts[q_best] / len(qs)
+        out["orient_conf"] = round(agree, 3)
+        if agree < float(settings.POSE_ORIENT_MIN_AGREE):
+            return out                   # 一致度不足 → 不转(FR-6)
+        out["rot_k"] = _q_to_k(q_best)
+        out["orient"] = ORIENT_MAP[out["rot_k"]]
+        return out
+    except Exception:                    # 永不抛契约:异常归"不可定"
+        return out
+
+
 def sample_frames(data: bytes, fps: Optional[float] = None,
                   max_frames: Optional[int] = None, t0: Optional[float] = None,
-                  t1: Optional[float] = None, width: int = 0):
+                  t1: Optional[float] = None, width: int = 0, rot: int = 0):
     """视频字节 → (RGB np 帧列表, 时间戳秒, 时长秒)。超 max_frames 自动加大步距。
 
     R-017v2:t0/t1=仅采该段(FR-10 fast-seek,段外不解);width>0 时降采样(粗扫提速)。
+    R-018 FR-4:rot∈0..3 → 每张解码帧 np.rot90(与判定同一 k,指标/骨架/裁剪同系);
+    越界按 0(不抛)。**默认 0 → 与 v2 逐值一致(向后兼容)**。
     """
     import av
     from app.config import settings
     fps = float(fps or settings.POSE_SAMPLE_FPS)
     max_frames = int(max_frames or settings.POSE_MAX_SAMPLE_FRAMES)
+    k = _norm_rot(rot)
 
     c = av.open(io.BytesIO(data))
     frames, ts = [], []
@@ -94,7 +213,7 @@ def sample_frames(data: bytes, fps: Optional[float] = None,
                 img = f.to_image()
                 if width and img.width > width:
                     img = img.resize((width, max(1, round(img.height * width / img.width))))
-                frames.append(np.asarray(img.convert("RGB")))
+                frames.append(rotate_frame(np.asarray(img.convert("RGB")), k))
                 ts.append(t)
                 next_t += step
                 while next_t <= t + 1e-9:  # 网格追赶,防漂移欠采
@@ -429,6 +548,9 @@ def _pace(groups: list, frame_hw, cad_spm, height_cm: float):
                 k0 = min(idxs, key=lambda k: abs(ts_a[k] - s0))
                 contacts.append(lms[k0][IDX[f"{side}_ankle"]][0] * W)
                 # 腿长标定只用 stance 帧(摆动期膝提踝抬,腿线失真)
+                # 像素距离口径:归一化坐标 ×(W,H) 即真像素距,横纵各按其轴缩放,
+                # 与 R-9 髋连线倾角(dx×W, dy×H)同口径 → 转正前后帧宽高互换仍正确
+                # (R-018 坐标系自查:此处无需改动,逐值不变)。
                 for k in idxs:
                     hip, knee, ankle = (lms[k][IDX[f"{side}_hip"]],
                                         lms[k][IDX[f"{side}_knee"]],

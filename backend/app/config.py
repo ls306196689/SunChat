@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     POSE_RUN_MIN_CAD: float = 125.0      # 窗口判"跑"的步频下限(步/分;走路≈100-120)
     POSE_USER_HEIGHT_CM: float = 0.0     # 身高(米/像素自标定算配速用;0=不输出配速 FR-11)
     POSE_SLO_RESTORE: bool = True        # 慢动作倍速还原(FR-8)
+    # R-018:抽帧朝向归一化(以人体头脚轴为基准,analysis A-4/A-5)
+    POSE_ORIENT_MIN_SAMPLES: int = 3     # 有效判定帧数下限,不足→undetermined(不转)
+    POSE_ORIENT_MIN_AGREE: float = 0.6   # 多数票占比门槛,不足→undetermined
+    POSE_ORIENT_EDGE_DEG: float = 15.0   # |θ−最近90°档| 超此值该帧弃权(斜握/异常姿态)
+    POSE_ORIENT_ENABLED: bool = True     # 关闭则一律 orient="off" 且不转正(回退 v2 行为)
 
     # 搜索配置
     SEARCH_DUCKDUCKGO_API: str = ""  # 可选，留空使用无 Key 版本

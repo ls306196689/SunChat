@@ -103,6 +103,13 @@
       "conclusion": "R-017 A-1/A-2/A-3 不受影响;落库 48.6 早于 fix 1635e885 属旧算法,不能反证 v2",
       "evidence_count": 3,
       "status": "confirmed"
+    },
+    {
+      "id": "A-7",
+      "topic": "坐标变换等价性:归一化关键点90°变换 vs 重推理(u差0.006)",
+      "conclusion": "判向可在原图一次检出上算,无需为判向重推理;但转正后粗扫关键点需重跑以统一坐标系",
+      "evidence_count": 1,
+      "status": "confirmed"
     }
   ],
   "requirements_version": 1,
@@ -148,6 +155,22 @@
       "impact": "低",
       "mitigation": "沿用 JPEG q85 落盘;必要时另需求调压缩",
       "status": "open"
+    },
+    {
+      "id": "R-6",
+      "desc": "k≠0时粗扫关键点重跑增加耗时",
+      "prob": "中",
+      "impact": "低",
+      "mitigation": "仅一次粗扫(5fps@256px),实测全片low_conf 0.5s级;evt日志total_ms可观测",
+      "status": "open"
+    },
+    {
+      "id": "R-7",
+      "desc": "quality增键使既有断言/前端解包失败",
+      "prob": "低",
+      "impact": "中",
+      "mitigation": "消费侧一律.get();AC-7全量零回归;前端只读report/frame_ids",
+      "status": "open"
     }
   ],
   "repo": {
@@ -157,5 +180,5 @@
     "last_pushed_commit": "61fd2b51",
     "push_pending": false
   },
-  "updated_at": "2026-09-26T12:20:00+08:00"
+  "updated_at": "2026-09-26T12:40:00+08:00"
 }

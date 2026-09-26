@@ -1,59 +1,55 @@
-# R-018 checkpoint(需求 v1 已写,待冻结门禁)
-更新: 2026-09-26 11:50 | 上下文快照,新会话优先读本文件 + state.json
+# R-018 checkpoint(step-1~4 done,剩 step-5 实拍 + step-6 归档)
+更新: 2026-09-27 | 上下文快照,新会话优先读本文件 + state.json
 
 ## 需求主线
-- R-018 跑姿抽帧朝向归一化,req_type=bugfix(影响>2 文件+quality 增键 → 标准流程,非 micro)
-- phase=requirements(v1),change_count=0,gates=[](**requirements_confirmed 尚未取得**)
-- 来源:R-017 step-8 实拍前置核查暴露的 R-017/risks[R-11](occurred);
-  用户否决"在 R-017 走 v3"(影响 4 已完成步骤触发熔断),明示**新开 R-018**
-- git: master,已 push 至 **cfc77c0d**(远端已同步)
+- R-018 跑姿抽帧朝向归一化(以人体头脚轴),bugfix 标准流程,phase=execute
+- 四道门禁齐:requirements(user)/architecture(user)/design+plan(**blanket**,
+  quote="后续都按照最优方案执行,我全部授权",scope=R-018)
+- 步骤:1✅ 31d2dc30 / 2✅ b4beb0d4 / 3✅ 2d482c85 / 4✅ bb52be8e(证据 run-evidence/)
+  / **5⏳ 真人实拍对账(需用户素材)** / 6⏳ 归档(归档节点必须单独 question,禁 blanket)
 
-## 用户明示指令(验收基准,不可偏离)
-> "横屏竖屏不能作为旋转依据。要识别人的朝向。以人头上脚下为基准来控制旋转。"
-→ FR-1/FR-2:**禁**用画面宽高比、**禁**用容器 rotate 元数据、**禁**用"某朝向能否检出
-MediaPipe"作判据;只用检出人体自身头脚轴。身高 **173cm**(配速对账用,POSE_USER_HEIGHT_CM)。
+## 已落地实现(勿重复设计)
+- `core/pose.py`:ORIENT_MAP/_norm_rot/rotate_frame/_pixel_pt/_frame_orient/_q_to_k/
+  `detect_orientation`(纯函数永不抛;u=肩髋轴中点法+鼻符号消180°+**像素域 θ**+15°边界带
+  弃权+多数投票);`sample_frames(rot=0)` 内 np.rot90,越界按 0
+- `analyze_video`:粗扫(rot=0)→判向→k≠0 则转正帧**重跑粗扫关键点**→门槛(不新增拒因)
+  →locate→密采 rot=k;`PoseResult.orient` + quality `orient`/`orient_conf`
+- `pose_report.transparency_lines`:首位插朝向行三态(转正/不可定/正立不打印)
+- `chat._frames_at_ts(data, ts, rot=0)` + 端点透传 `result.orient["rot_k"]`;evt 增
+  `orient`/`orient_conf`(ok 路;fail 路无 result 按设计省略)
+- config:`POSE_ORIENT_MIN_SAMPLES=3 / MIN_AGREE=0.6 / EDGE_DEG=15 / ENABLED`(关=回退 v2)
+- **`_pace` 零改动**(decisions D-6:v2 写法本就是真像素距,横竖帧皆正确)
 
-## 取证要点(细节见 analysis.md A-1~A-6,勿重复实验)
-- PyAV 17.1.0 `to_image()` **不应用** rotate 元数据(合成 mp4 实证:metadata 无 rotate/
-  side_data=None/尺寸仍 640×480)
-- 真人落盘帧(消息246)pipeline 自采帧内人体**横躺**:肩中点→髋中点偏离竖直 89.8~92.9°,
-  bbox 高/宽 0.28;转正后 3.68。qwen2.5vl 独立复核一致
-- 污染定量:踝真振荡轴 y→x;body_ratio 0.306→0.152(门槛0.12,误拒风险);
-  pelvic_tilt +1.0°→+91.4°(落库 -42.1/-31.9/-28.4 同量级)
-- **A-4 设计关键约束(勿重蹈)**:四向试探取"可检出者"必选错——真人帧真 upright 档在
-  生产门槛 0.5 **检不出**(降到 0.15 才出且 vis 仅 0.70),错误朝向也能检出并给反向几何
-  → 判朝向只能在**给定一次检出**的关键点上算几何
-- **A-5 实现依据(实测通过)**:`u=单位化(肩中点−髋中点)`,180°歧义用"鼻在 u 上的符号"
-  消解,量化到最近 90°;4 横躺帧一致判 270°CCW(=CW90),正立帧 238-A 判 0°;
-  |肩-髋|=113~134px,偏角 -87~-95°,距档位边界裕度 >10°
+## 测试基线(全绿)
+- `cd backend && python -m pytest tests -q` → **367 passed, 1 skipped**(~14s)
+  (R-017 基线 340+1skip,+27 条:pose_core 19 / pose_report 4 / pose_api 4)
+- AC-1/2/3/4/5/7 已覆盖;**AC-3 文案 + AC-5 含"忘传 rot 必失败"负例**(32×16 横 vs 16×32 竖)
+- 夹具:`_rot_lm`(与 np.rot90 逐像素/归一化同构)、`_patch_orient`(fake_detect 按喂入帧
+  是否已转正决定给正向/旋转关键点——杜绝"关键点凭空转正")。k 方向真值 = (4−src_k)%4
 
-## 下一步(门禁顺序)
-1. ⏳**requirements_confirmed**(question,禁 blanket)← 当前卡这里
-2. architecture/design:R-018 是 bugfix 增量,`design-change.md` 写增量(模块 P1 为主,
-   P2/P3/P4 小改),门禁 design_confirmed
-3. plan.md(六字段步骤表,含单测与关联风险)→ plan_confirmed → execute
-4. execute 完 → **回 R-017 step-8** 做真人实拍对账(横屏+竖屏各一段)+ 全量终测 → 归档
-   R-017(身高 173cm 出配速),然后归档 R-018
-
-## 关键实现约束(实现时照做)
-- 判定与转正的 k 值必须同时应用于**密采帧**与**骨架帧绘制/裁剪**(FR-4,防指标转正骨架仍横)
-- 不可定向导:`orient="undetermined"` + `orient_conf`,**不转、不新增拒析理由**,
-  报告透明度行打印"朝向不可定,指标可能失真"(FR-5/FR-6,避免与 R-3 门槛叠加误拒)
-- quality 增键必须向后兼容:`q.get("orient")`,报告/日志/测试均用 get
-- AC-4 必须有"元数据与宽高比解耦"断言:同内容伪装带 rotate=90 / 不带 / 竖幅 / 横幅,
-  判定只随人体朝向变
-
-## 验证命令
-- `cd backend && python -m pytest tests -q`(基线 340 passed 1 skipped)
-- 活体:curl -X POST localhost:8000/api/v1/chat/video/pose -F file=@run.mp4 -F session_id=1
-- 服务在跑:uvicorn :8000(今 09:31 启,无 --reload → **改代码后必须重启**)、
-  vite :5173(`/m` 移动端,`/api` 代理后端)
-- 重启后端:`kill <pid>` 后 `cd backend && setsid --fork bash -c 'exec python -m uvicorn
-  app.main:app --host 0.0.0.0 --port 8000 >> backend.log 2>&1 < /dev/null'`
+## 未完成 = 只有两条
+1. **step-5 真人实拍对账(阻塞在素材)**:用户手机侧跑实拍**横屏录 + 竖屏录各一段**
+   (跑过相机 2s 以上,身高对账已在 `backend/.env` 写 `POSE_USER_HEIGHT_CM=173`)。
+   判据 AC-6:`orient` 非 undetermined、cad∈[140,220]、骨架帧人正立、报告含"已按人体
+   朝向转正"、配速出数(±20% 级对账)。结果写 `R-018/run-evidence/live-reconcile.md`,
+   并回写 **R-017/step-8**(其 blocked 由本需求解除)。**本机无摄像头+外网受限,合成素材
+   不能产生真人跑动关键点 → 必须真人素材**(step-5 单测豁免理由已入 plan)。
+   收件后:`curl -X POST localhost:8000/api/v1/chat/video/pose -F file=@x.mp4 -F session_id=21`
+2. **step-6 归档**:design/modules 基线回写 + baseline.md + INDEX 两行(R-017/R-018)+
+   `compliance.sh archive` 两侧 FAIL=0 + 全量测试摘要入档。**归档前必须 question 取确认**
 
 ## 环境事实(省得再探)
-- 本机无摄像头、无系统 ffmpeg(可 `pip install --target /tmp/fftool imageio-ffmpeg` 取便携
-  ffmpeg,已验证可用);外网 raw.githubusercontent/huggingface/googleapis(除 mediapipe-models)
-  不可达 → **合成素材无法替代真人关键点检出**,AC-6 必须真人实拍
-- 服务健康:`/api/v1/health`(非 /health,后者被 SPA fallback 吞);首次探活 ~11s 后缓存
-- R-016 真机对账仍 in_progress(不阻塞本需求)
+- 服务已恢复:uvicorn :8000(重启于 09-27,health 冷启动 ~30s 后 <1s)、vite :5173(`/m`)
+- `backend/.env` 已建(gitignored,含 POSE_USER_HEIGHT_CM=173;start.sh cd backend 后启动,
+  相对 .env 生效);改码需重启(无 --reload):`pkill -f "uvicorn app.main"` 然后
+  `cd backend && setsid --fork bash -c 'exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 >> backend.log 2>&1 < /dev/null'`
+- 局域网 192.168.1.47(`/m` 手机可直连上传实拍)
+- 便携 ffmpeg:`/tmp/fftool/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2`;
+  ⚠**ffmpeg 7 写 `rotate=` 元数据会被丢弃** → 元数据变体活体对照本机不可构造
+  (已在 step-4 证据如实标注未执行;等效钉死=源码 grep 禁读 + A-1 PyAV 不应用元数据)
+- 真人落盘帧可用:`data/uploads/chat/`(246 系列 1280×720 人横躺;238-A 真竖屏正立)
+  —step-4 活体冒烟判定与 A-5 复算吻合(246-A θ=−90.2→q270;238-A θ=−7.1→q0)
+
+## 遗留/后续(不在本需求)
+- R-019:`core/video.py`(R-010 视频对话抽帧路)同族不归一化(风险 R-4,INDEX 已提示)
+- skill issue-009(compliance 从 skill 目录跑路径误报 + change/micro 节点缺登记)用户选暂不处理

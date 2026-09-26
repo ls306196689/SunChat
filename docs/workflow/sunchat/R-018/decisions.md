@@ -38,3 +38,15 @@
   如实计数、低一致度 undetermined 也回显真实占比(0.5 这类值对排障关键)。
   判定语义不变,仅诊断字段更诚实;单测 `test_undetermined_few_samples`/
   `test_low_agreement_undetermined` 钉住。
+
+## D-8 AC-4 的"元数据禁用"半边以 grep 禁令 + 活体对照覆盖,不写行为单测(2026-09-27,step-4b 后追记)
+- 现状:判定源码有 `test_source_has_no_metadata_or_aspect_basis`(禁 `metadata`/`side_data`/
+  `rotate`/`displaymatrix`/`container`/`stream` 与宽高比比较)钉住"不去读";
+  宽高比半边另有**行为**单测(`test_decoupled_from_aspect_ratio`、`test_theta_is_pixel_domain`)。
+- 为什么元数据半边不落**行为**单测:行为断言需要一个"带 rotate 元数据的夹具",而
+  ①本机便携 ffmpeg 7 写不出(step-4 实录),把它做进 CI 会让测试依赖手工改字节的工具链;
+  ②更重要的是 PyAV 根本不应用该元数据(analysis A-1 + step-4b 活体:`to_image()` 尺寸
+  不随 display matrix 变),即"读了也没有可执行语义",夹具能证明的只是"我们没照元数据转帧",
+  这已被源码禁令 + A-1 双重覆盖;真正要防的是"哪天有人加一行去读元数据",grep 禁令恰好拦这个。
+- 替代覆盖:step-4b 活体对照(无/顺90/顺270/180 四种矩阵判定逐值一致)+ §四决定性宽高比
+  对照(正立人放进横幅仍判 0),两者写入 run-evidence,归档时随需求入档。

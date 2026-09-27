@@ -140,7 +140,8 @@
       "evidence": "run-evidence/step4-regression-and-smoke.md:367 passed 1 skipped(AC-7 零回归,既有用例一字未改);真人 AC-4 活体面=判定只随人体朝向变(横幅判270cw/同内容竖幅不偷判0/238-A竖屏判0);rotate=90 元数据变体本机 ffmpeg7 写入被丢弃→当时标注未执行,后由 step-4b 补做完成;FR-7 活体 body_ratio .256→.271;k≠0 重跑耗时端点 ms≈580 无劣化(R-6)",
       "supplementary_evidence": [
         "run-evidence/step4b-ac4-metadata-variant.md(补 step-4 标注未执行的『带 rotate 元数据 vs 不带』活体对照:直改 tkhd matrix box 造手机竖拍同款元数据并经 PyAV 反读证实 DISPLAYMATRIX 存在;真人内容在无/顺90/顺270/180 四种显示矩阵下 orient 与 rot_k 逐值一致。§四 决定性宽高比对照:真人正立 238-A 竖幅→加黑列变横幅,两口径仍 orient=0/rot_k=0/检出4/4,宽高比启发式必然转掉它而实现未转)",
-        "run-evidence/step4c-real-inference-equivalence.md(真实 MediaPipe 推理下跑通判向→转正→重跑粗扫→密采同 k:横躺20/20检出判270cw/k=3 conf1.0;FR-7 唯一变量对照 body_ratio 不转正0.316→转正0.476 vs 正立基准0.474;未转正产 pelvic_tilt −61.1° 错轴读数、转正 +7.7°;同-k 骨架帧真人字节活体 640×360 vs 360×640)"
+        "run-evidence/step4c-real-inference-equivalence.md(真实 MediaPipe 推理下跑通判向→转正→重跑粗扫→密采同 k:横躺20/20检出判270cw/k=3 conf1.0;FR-7 唯一变量对照 body_ratio 不转正0.316→转正0.476 vs 正立基准0.474;未转正产 pelvic_tilt −61.1° 错轴读数、转正 +7.7°;同-k 骨架帧真人字节活体 640×360 vs 360×640)",
+        "run-evidence/step4d-180-branch.md(补最后一档真实推理:倒立内容 8/8 检出判 orient=180/rot_k=2 投票conf1.0,逐帧 θ −170.5~−175.1 偏差 4.9~9.5°<EDGE15 无弃权;与 90° 关键差别=180° 保持竖直范围故 body_ratio 三组 0.475/0.476/0.479 **不触发门槛**(90° 是 0.316 会误伤);强制整段同字节对照:不转正 pelvic_tilt −20.4°/asym 59.9%/stance_swing 0.534,转正 +2.6°/25.3%/0.935,且 6 个关键点满足 x≈1−x_other(左右标签镜像,asym 虚高机制);四档真值表 k=0→0/0、k=1→270cw/3、k=2→180/2、k=3→90cw/1 全 PASS)"
       ]
     },
     {
@@ -230,6 +231,13 @@
       "conclusion": "同一横躺字节:不转正 body_ratio 0.316 / pelvic_tilt −61.1°(错轴、物理不可能),转正 0.476 / +7.7°,正立基准 0.474 → 转正后尺度与角度回到正立系(FR-7);不转正的危害不是'少一个数'而是'给出看似合理的错数',与线上 −42.1° 读数同源。合成素材的 cadence 不可用于 ±5% 验收(正立基准自身 375 vs 真值 170)→ AC-1 数值对账归 step-5 真人",
       "evidence_count": 3,
       "status": "confirmed"
+    },
+    {
+      "id": "A-10",
+      "topic": "180°(头朝下)档的真实危害在带符号量与左右标签,不在检出/门槛",
+      "conclusion": "倒立素材真实推理 8/8 检出、判 180/k=2、投票 conf 1.0(θ≈−173°,偏差<EDGE_DEG 15)→ 消 180° 靠鼻在 u 上的符号,与『能否检出』无关(lite 模型倒立照样给点,反证 A-4)。180° 与 90° 危害形态不同:竖直范围不变→body_ratio 0.479≈基准 0.475,FR-7 门槛不被误伤;坏在指标系——同字节同窗口不转正读出 pelvic_tilt −20.4°(转正 +2.6°)、asym 59.9%(转正 25.3%)、stance_swing 0.534(转正 0.935),且 6 关键点 x≈1−x_other 证明图像翻转使 MediaPipe 重排 L/R → 报告『左腿/右腿』归因指向错腿。四档真值表(源 rot90 k=0/1/2/3 → 判 0/270cw/180/90cw,rot_k 0/3/2/1)逐档 PASS,方向性映射有独立真值不靠类推",
+      "evidence_count": 4,
+      "status": "confirmed"
     }
   ],
   "requirements_version": 1,
@@ -301,5 +309,5 @@
     "push_pending": false,
     "push_pending_note": "2026-09-27 已推清(本轮多 commit,tip 以 `git ls-remote origin refs/heads/master` 为准,本 commit 推送后 origin==HEAD 即 last_pushed)。经验固化:①本机 push 走默认 HTTP/2 必 GnuTLS -110 → `-c http.version=HTTP/1.1`,间歇超时用 ls-remote 判成败;②本仓 master 未设 upstream,`@{u}` 系命令 fatal 且 stdout 空 → skill §push 自检会假 CLEAN(fail-open),自检与范围核对一律用显式 `origin/master..HEAD`;③门禁型检查 MUST 先于动作,禁止事后追认(skill issue-019/OPT-024,本轮实际踩过)。"
   },
-  "updated_at": "2026-09-27T10:17:48+08:00"
+  "updated_at": "2026-09-27T12:25:31+08:00"
 }

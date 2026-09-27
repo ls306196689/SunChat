@@ -305,9 +305,9 @@
     "created": true,
     "remote": "https://github.com/ls306196689/SunChat.git",
     "branch": "master",
-    "last_pushed_commit": "7e22c555",
+    "last_pushed_commit": "9f030a60",
     "push_pending": false,
-    "push_pending_note": "2026-09-27 已推清(本轮多 commit,tip 以 `git ls-remote origin refs/heads/master` 为准,本 commit 推送后 origin==HEAD 即 last_pushed)。经验固化:①本机 push 走默认 HTTP/2 必 GnuTLS -110 → `-c http.version=HTTP/1.1`,间歇超时用 ls-remote 判成败;②本仓 master 未设 upstream,`@{u}` 系命令 fatal 且 stdout 空 → skill §push 自检会假 CLEAN(fail-open),自检与范围核对一律用显式 `origin/master..HEAD`;③门禁型检查 MUST 先于动作,禁止事后追认(skill issue-019/OPT-024,本轮实际踩过)。"
+    "push_pending_note": "2026-09-27T12:5x 本轮 push 成功并 ls-remote 核实:origin/master=9f030a60=本地 HEAD,两仓(SunChat/skills)均无待推。回执:sensitive_self_check base=origin/master(显式,@{u} 未设不可用)、pending=1、sample_bytes=12931(非空→三态成立非 fail-open)、STRONG 新增行 0 / WEAK 新增行 0 / 全文 RFC1918 字面 0 → CLEAN,先检后推同一窗口。固化经验三条不变(HTTP/1.1 绕 GnuTLS -110;显式 base;门禁检查先于动作)。"
   },
-  "updated_at": "2026-09-27T12:25:31+08:00"
+  "updated_at": "2026-09-27T12:52:00+08:00"
 }

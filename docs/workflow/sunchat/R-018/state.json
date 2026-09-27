@@ -305,9 +305,9 @@
     "created": true,
     "remote": "https://github.com/ls306196689/SunChat.git",
     "branch": "master",
-    "last_pushed_commit": "9f030a60",
+    "last_pushed_commit": "d0b7e292",
     "push_pending": false,
-    "push_pending_note": "2026-09-27T12:5x 本轮 push 成功并 ls-remote 核实:origin/master=9f030a60=本地 HEAD,两仓(SunChat/skills)均无待推。回执:sensitive_self_check base=origin/master(显式,@{u} 未设不可用)、pending=1、sample_bytes=12931(非空→三态成立非 fail-open)、STRONG 新增行 0 / WEAK 新增行 0 / 全文 RFC1918 字面 0 → CLEAN,先检后推同一窗口。固化经验三条不变(HTTP/1.1 绕 GnuTLS -110;显式 base;门禁检查先于动作)。"
+    "push_pending_note": "2026-09-27T13:1x 两仓均无待推:本仓 origin/master=d0b7e292=本地 HEAD(skills 仓 origin/main=00b3d79)。本轮回执改用 skill R-009 的机械节点 `compliance.sh pre-push sunchat/R-018` → R009-PRE-PUSH base=last_pushed_commit:9f030a60b pending=1 sample_bytes=3038/6609 STRONG(added=0,diff=0) WEAK(added=0,diff=0) CLEAN,FAIL=0 后同一窗口 push,ls-remote 核实。注:本字段随下一批提交回写,当前权威 tip 以 `git ls-remote origin refs/heads/master` 为准。"
   },
-  "updated_at": "2026-09-27T12:52:00+08:00"
+  "updated_at": "2026-09-27T13:12:00+08:00"
 }

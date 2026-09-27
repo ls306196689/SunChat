@@ -148,7 +148,7 @@
       "goal": "真人实拍对账(横屏+竖屏,身高173cm)与 R-017 step-8 合并执行",
       "module": "端到端",
       "status": "blocked",
-      "blocked_reason": "需用户手机实拍素材(本机无摄像头;mixkit 403/archive.org+commons 超时/pexels 404,pandamation 走 Google Drive 不通;合成剪影过不了 coverage 门槛且 cadence 严重高估)。恢复路径已就绪并入库:cd backend && python scripts/pose_live_capture.py --file x.mp4 --label 横屏 --session-id 82(横/竖屏各一次,自动按 AC-6 打 PASS/FAIL + 机读 JSON + 报告原文,--strict 退 1;judge() 有 8 例单测;拒析路已冒烟验证)。细则见 todo.md T-1;结果写 run-evidence/live-reconcile.md 并回写 R-017/step-8。",
+      "blocked_reason": "需用户手机实拍素材(本机无摄像头;mixkit 403/archive.org+commons 超时/pexels 404,pandamation 走 Google Drive 不通;合成剪影过不了 coverage 门槛且 cadence 严重高估)。恢复路径已就绪并入库:cd backend && python scripts/pose_live_capture.py --file x.mp4 --label 横屏 --session-id 82(横/竖屏各一次,自动按 AC-6 打 PASS/FAIL + 机读 JSON + 报告原文,--strict 退 1;judge() 有 8 例单测;拒析路已冒烟验证)。细则见 todo.md T-1;结果写 run-evidence/live-reconcile.md 并回写 R-017/step-8。 服务侧就绪已核:vite 5173 + uvicorn 8000 均在 0.0.0.0 监听;",
       "context": [
         "R-017/plan.md",
         "R-018/requirements.md",
@@ -301,5 +301,5 @@
     "push_pending": false,
     "push_pending_note": "2026-09-27 已推清(本轮多 commit,tip 以 `git ls-remote origin refs/heads/master` 为准,本 commit 推送后 origin==HEAD 即 last_pushed)。经验固化:①本机 push 走默认 HTTP/2 必 GnuTLS -110 → `-c http.version=HTTP/1.1`,间歇超时用 ls-remote 判成败;②本仓 master 未设 upstream,`@{u}` 系命令 fatal 且 stdout 空 → skill §push 自检会假 CLEAN(fail-open),自检与范围核对一律用显式 `origin/master..HEAD`;③门禁型检查 MUST 先于动作,禁止事后追认(skill issue-019/OPT-024,本轮实际踩过)。"
   },
-  "updated_at": "2026-09-27T05:41:14+08:00"
+  "updated_at": "2026-09-27T10:17:48+08:00"
 }
